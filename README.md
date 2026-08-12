@@ -1,6 +1,8 @@
-# LYTC Hotel Management Dashboard
+# Dash1 Hotel Management Dashboard
 
-A comprehensive luxury hotel management dashboard built by LYTC, featuring an integrated system for room management, reservations, guest requests, housekeeping, financial services, and analytics. The application is designed entirely in Arabic to serve the Middle Eastern hospitality market.
+Frontend application for a luxury hotel operations dashboard. This repository contains the React + TypeScript user interface for managing rooms, reservations, guest services, housekeeping, restaurant and cafe operations, special offers, and hotel analytics.
+
+Repository: https://github.com/sabry660/dash1.git
 
 ## Features
 
