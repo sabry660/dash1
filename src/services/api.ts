@@ -564,17 +564,17 @@ class APIService {
   }
 
   // Helper method to get headers
-  private getHeaders(includeAuth: boolean = true): Record<string, string> {
+  private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
-    // Always try to send token if available
+    // Always include Authorization header if token is available
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    // Always try to send tenant ID if available
+    // Always include X-Tenant-ID header if tenantId is available
     if (this.tenantId) {
       headers['X-Tenant-ID'] = this.tenantId;
     }
@@ -595,7 +595,7 @@ class APIService {
       try {
         const errorJson = JSON.parse(errorBody);
         errorMsg = errorJson.message || errorJson.error || errorJson.detail || errorMsg;
-      } catch {}
+      } catch { }
       throw new Error(errorMsg);
     }
     if (response.status === 204) {
@@ -612,7 +612,10 @@ class APIService {
     const makeRequest = async (): Promise<Response> => {
       return fetch(url, {
         ...options,
-        headers: this.getHeaders(true),
+        headers: {
+          ...this.getHeaders(),
+          ...(options.headers || {}),
+        },
       });
     };
 
@@ -657,20 +660,16 @@ class APIService {
    * POST /api/auth/login
    */
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const headers = this.getHeaders(false);
-    // Add X-Tenant-ID header for hotel authentication
-    if (this.tenantId) {
-      headers['X-Tenant-ID'] = this.tenantId;
-    }
-    
     const response = await fetch(`${this.baseURL}/api/auth/login`, {
       method: 'POST',
-      headers,
+      headers: {
+        ...this.getHeaders(),
+      },
       body: JSON.stringify(credentials),
     });
 
     const data = await this.handleResponse<LoginResponse>(response);
-    
+
     // Store token if present in response
     if (data.token) {
       this.setToken(data.token);
@@ -686,12 +685,13 @@ class APIService {
   async refreshToken(): Promise<LoginResponse> {
     const response = await fetch(`${this.baseURL}/api/auth/refresh`, {
       method: 'POST',
-      headers: this.getHeaders(false),
-      credentials: 'include', // For cookies
+      headers: {
+        ...this.getHeaders(),
+      },
     });
 
     const data = await this.handleResponse<LoginResponse>(response);
-    
+
     // Update token if present in response
     if (data.token) {
       this.setToken(data.token);
@@ -707,11 +707,13 @@ class APIService {
   async logout(): Promise<void> {
     const response = await fetch(`${this.baseURL}/api/auth/logout`, {
       method: 'POST',
-      headers: this.getHeaders(true),
+      headers: {
+        ...this.getHeaders(),
+      },
     });
 
     await this.handleResponse<void>(response);
-    
+
     // Clear token from storage
     this.clearToken();
   }
@@ -1033,7 +1035,7 @@ class APIService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const headers = this.getHeaders(true);
+    const headers = this.getHeaders();
     // Remove Content-Type to let browser set it with boundary for multipart
     delete headers['Content-Type'];
 
@@ -1041,7 +1043,9 @@ class APIService {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+      headers: {
+        ...headers,
+      },
     });
 
     return this.handleResponse<RoomResponse>(response);
@@ -1055,7 +1059,7 @@ class APIService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const headers = this.getHeaders(true);
+    const headers = this.getHeaders();
     // Remove Content-Type to let browser set it with boundary for multipart
     delete headers['Content-Type'];
 
@@ -1063,7 +1067,9 @@ class APIService {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+      headers: {
+        ...headers,
+      },
     });
 
     return this.handleResponse<MenuItemResponse>(response);
@@ -1077,7 +1083,7 @@ class APIService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const headers = this.getHeaders(true);
+    const headers = this.getHeaders();
     // Remove Content-Type to let browser set it with boundary for multipart
     delete headers['Content-Type'];
 
@@ -1085,7 +1091,9 @@ class APIService {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+      headers: {
+        ...headers,
+      },
     });
 
     return this.handleResponse<MenuItemResponse>(response);
@@ -1099,7 +1107,7 @@ class APIService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const headers = this.getHeaders(true);
+    const headers = this.getHeaders();
     // Remove Content-Type to let browser set it with boundary for multipart
     delete headers['Content-Type'];
 
@@ -1107,7 +1115,9 @@ class APIService {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+      headers: {
+        ...headers,
+      },
     });
 
     return this.handleResponse<MenuItemResponse>(response);
@@ -1121,7 +1131,7 @@ class APIService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const headers = this.getHeaders(true);
+    const headers = this.getHeaders();
     // Remove Content-Type to let browser set it with boundary for multipart
     delete headers['Content-Type'];
 
@@ -1129,7 +1139,9 @@ class APIService {
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+      headers: {
+        ...headers,
+      },
     });
 
     return this.handleResponse<SpecialOfferResponse>(response);
@@ -1400,8 +1412,8 @@ class APIService {
         `${this.baseURL}/api/dashboard/room-service/menu?${params.toString()}`,
         { method: 'GET' }
       );
-      const roomServiceItems = Array.isArray(roomServiceMenu?.content) ? roomServiceMenu.content : 
-                               Array.isArray(roomServiceMenu) ? roomServiceMenu : [];
+      const roomServiceItems = Array.isArray(roomServiceMenu?.content) ? roomServiceMenu.content :
+        Array.isArray(roomServiceMenu) ? roomServiceMenu : [];
       roomServiceItems.forEach((item: any) => {
         allItems.push({
           id: item.id,
@@ -1508,14 +1520,17 @@ class APIService {
     const formData = new FormData();
     formData.append('file', file);
 
-    const headers = this.getHeaders(true);
+    const headers = this.getHeaders();
+    // Remove Content-Type to let browser set it with boundary for multipart
     delete headers['Content-Type'];
 
     const url = `${this.baseURL}/api/dashboard/front-desk/room-categories/${id}/image`;
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
-      headers,
+      headers: {
+        ...headers,
+      },
     });
 
     return this.handleResponse<RoomCategoryResponse>(response);

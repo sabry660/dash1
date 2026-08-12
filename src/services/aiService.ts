@@ -54,7 +54,7 @@ class AIService {
   async askAgent(query: string): Promise<AIResponse> {
     const token = localStorage.getItem('auth_token');
     const tenantId = localStorage.getItem('tenant_id');
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       'Accept-Language': 'ar-SA',
@@ -70,7 +70,9 @@ class AIService {
 
     const response = await fetch(`${this.baseURL}/api/ai/ask`, {
       method: 'POST',
-      headers,
+      headers: {
+        ...headers,
+      },
       body: JSON.stringify({ query, language: 'ar' }),
     });
 
@@ -80,7 +82,7 @@ class AIService {
       try {
         const errorJson = JSON.parse(errorBody);
         errorMsg = errorJson.message || errorJson.error || errorJson.detail || errorMsg;
-      } catch {}
+      } catch { }
       throw new Error(errorMsg);
     }
 
