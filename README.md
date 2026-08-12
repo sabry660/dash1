@@ -1,50 +1,45 @@
 # Dash1 Hotel Management Dashboard
 
-Frontend application for a luxury hotel operations dashboard. This repository contains the React + TypeScript user interface for managing rooms, reservations, guest services, housekeeping, restaurant and cafe operations, special offers, and hotel analytics.
-
-Repository: https://github.com/sabry660/dash1.git
+This repository contains the frontend application for a hotel management dashboard built with React and TypeScript. The application supports room management, reservations, guest services, housekeeping, restaurant and cafe operations, special offers, and analytics.
 
 ## Features
 
-- **Room Management**: Complete oversight of room status, occupancy, and maintenance with real-time updates
-- **Room Categories**: Manage room categories with specifications, pricing, and daily rates
-- **Reservation System**: Streamlined booking management with calendar view, guest check-in/check-out processes
-- **Landing Page Integration**: Handle reservation requests from the landing page with approval/rejection workflow
-- **Guest Services**: Efficient handling of guest requests and service orders (room service, restaurant, cafe)
-- **Menu Management**: Create and manage menu items with image uploads for all service categories
-- **Special Offers**: Promotional offers management with image support
-- **Housekeeping Coordination**: Real-time room cleaning status and staff assignment
-- **Financial Analytics**: Comprehensive reporting on revenue, expenses, and performance metrics
-- **Real-time Updates**: SSE (Server-Sent Events) integration for live data synchronization
-- **Image Compression**: Automatic WebP compression for images under 1MB
-- **Arabic Interface**: Full Arabic language support with RTL (right-to-left) layout
-- **Modern UI**: Built with React 19, Tailwind CSS, and Motion for smooth animations
-- **Responsive Design**: Optimized for desktop, tablet, and mobile devices
+- Room management with status tracking, occupancy monitoring, and maintenance workflows
+- Room category management with pricing and specifications
+- Reservation management including booking, check-in, and check-out workflows
+- Landing page reservation handling with approval and rejection flows
+- Guest service request handling for room service, restaurant, and cafe orders
+- Menu and special offer management with image support
+- Housekeeping coordination with room cleaning status and staff assignments
+- Financial analytics and reporting for revenue, expenses, and performance metrics
+- Real-time updates via Server-Sent Events (SSE)
+- Automatic image compression for optimized uploads
+- Full Arabic interface support with right-to-left layout
+- Responsive design for desktop, tablet, and mobile screens
 
-## Technology Stack
+## Technology stack
 
-- **Frontend Framework**: React 19 with TypeScript
-- **Styling**: Tailwind CSS v4
-- **Build Tool**: Vite 6
-- **Animations**: Motion (Framer Motion)
-- **Icons**: Lucide React
-- **API Integration**: REST API with Swagger documentation compliance
-- **Real-time Updates**: Server-Sent Events (SSE)
-- **Image Processing**: browser-image-compression for WebP conversion
-- **Backend API**: https://lytc-hotel-backend.onrender.com
+- Frontend: React 19 with TypeScript
+- Styling: Tailwind CSS v4
+- Build tool: Vite 6
+- Animations: Framer Motion
+- Icons: Lucide React
+- API integration: REST API
+- Real-time updates: Server-Sent Events (SSE)
+- Image processing: browser-image-compression
 
 ## Prerequisites
 
-- Node.js (v18 or higher recommended)
-- npm or yarn package manager
-- Google Gemini API Key
+- Node.js v18 or higher
+- npm or yarn
+- Google Gemini API key (if using AI integration)
 
 ## Installation
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd Dashboard
+   git clone https://github.com/sabry660/dash1.git
+   cd dash1
    ```
 
 2. Install dependencies:
@@ -52,80 +47,71 @@ Repository: https://github.com/sabry660/dash1.git
    npm install
    ```
 
-3. Create environment file:
-   Create a `.env.local` file in the root directory and add your Gemini API key:
-   ```
-   GEMINI_API_KEY=your_api_key_here
+3. Configure environment variables:
+   Create a `.env.local` file in the project root and add the required values.
+   ```bash
+   echo "GEMINI_API_KEY=your_api_key_here" > .env.local
    ```
 
-## Running the Application
+## Development
 
-Start the development server:
+Start the application in development mode:
+
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`
+Open the application in a browser at `http://localhost:3000`.
 
-## Building for Production
+## Production build
 
-Create an optimized production build:
+Build the application for production:
+
 ```bash
 npm run build
 ```
 
 Preview the production build:
+
 ```bash
 npm run preview
 ```
 
-## Project Structure
+## Project structure
 
-```
-Dashboard/
-├── public/              # Static assets (logo, images)
-├── src/
-│   ├── components/      # Reusable React components
-│   │   ├── RoomsSection.tsx
-│   │   ├── RoomCategoriesSection.tsx
-│   │   ├── ReservationsSection.tsx
-│   │   ├── OrdersSection.tsx
-│   │   ├── SpecialOffersSection.tsx
-│   │   ├── MenuItemsSection.tsx
-│   │   └── ...
-│   ├── services/        # API service layer
-│   │   └── api.ts       # REST API integration with Swagger types
-│   ├── hooks/           # Custom React hooks
-│   │   └── useSSE.ts    # Server-Sent Events hook
-│   ├── utils/           # Utility functions
-│   │   └── imageCompression.ts  # WebP image compression
-│   ├── types.ts         # TypeScript type definitions
-│   ├── App.tsx         # Main application component
-│   ├── main.tsx        # Application entry point
-│   └── index.css       # Global styles
-├── index.html          # HTML template with SEO meta tags
-├── package.json        # Project dependencies and scripts
-├── tsconfig.json       # TypeScript configuration
-└── vite.config.ts      # Vite build configuration
+```text
+src/
+├── components/          # Reusable UI components
+├── contexts/            # React context providers
+├── hooks/               # Custom hooks
+├── services/            # API service layer
+├── utils/               # Utility functions
+├── App.tsx              # Main application component
+├── main.tsx             # Application entry point
+└── index.css            # Global styles
+public/                   # Static assets
+package.json              # Project dependencies and scripts
+tsconfig.json             # TypeScript configuration
+vite.config.ts            # Vite configuration
+README.md                 # Project documentation
 ```
 
-## Development Scripts
+## Available scripts
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-- `npm run lint` - Run TypeScript type checking
-- `npm run clean` - Clean build artifacts
+- `npm run dev` — start the development server
+- `npm run build` — build the application for production
+- `npm run preview` — preview the production build
+- `npm run lint` — run TypeScript checks and linting
+- `npm run clean` — remove build artifacts
 
-## Browser Support
+## Browser support
 
-The application supports all modern browsers including Chrome, Firefox, Safari, and Edge.
+The application is tested in modern browsers including Chrome, Firefox, Safari, and Edge.
 
 ## License
 
-Proprietary - Copyright LYTC
+This repository is proprietary.
 
 ## Support
 
-For technical support or inquiries, please contact the LYTC development team.
-# dash1
+For questions or support, contact the project maintainer.
