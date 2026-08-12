@@ -1,0 +1,6 @@
+{
+  "name": "LYTC Hotel Management Dashboard",
+  "description": "لوحة التحكم الفاخرة لإدارة الفنادق لشركة LYTC - نظام متكامل لإدارة الغرف، الحجوزات، طلبات النزلاء، النظافة والخدمات المالية والتحليلات باللغة العربية بالكامل.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

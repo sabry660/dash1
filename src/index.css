@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@200;300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Cairo", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-gold-50: #FCF9F2;
+  --color-gold-100: #F7F0DF;
+  --color-gold-200: #EEDEB9;
+  --color-gold-300: #E2C78C;
+  --color-gold-400: #D8B062;
+  --color-gold-500: #C59740;
+  --color-gold-600: #AA7B30;
+  --color-gold-700: #8E6024;
+  --color-gold-800: #71481D;
+  --color-gold-900: #5C3A1A;
+  --color-gold-950: #341E0E;
+  
+  --color-champagne: #F1E5AC;
+  --color-gold: #D4AF37;
+  --color-royal-blue: #1E40AF;
+  --color-royal-light: #3B82F6;
+  --color-luxury-black: #050505;
+  --color-luxury-gray: #121212;
+  --color-glass: rgba(255, 255, 255, 0.7);
+  --color-glass-border: rgba(212, 175, 55, 0.15);
+}
+
+@layer base {
+  html, body {
+    background-color: #F8F6F2;
+    color: #111827;
+    font-family: "Cairo", sans-serif;
+    overflow-x: hidden;
+  }
+  
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #F3F4F6;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #D1D5DB;
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #D4AF37;
+  }
+}
