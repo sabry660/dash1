@@ -519,7 +519,6 @@ interface PagedModelSpecialOrderResponse {
 class APIService {
   private baseURL: string;
   private token: string | null = null;
-  private hotelId: string | null = null;
   private tenantId: string | null = null;
   private isRefreshing: boolean = false;
 
@@ -527,27 +526,8 @@ class APIService {
     this.baseURL = baseURL;
     // Load token from localStorage on initialization
     this.token = localStorage.getItem('auth_token');
-    // Load hotel ID from localStorage on initialization
-    this.hotelId = localStorage.getItem('hotel_id') || localStorage.getItem('login_hotel_id');
     // Load tenant ID from localStorage on initialization
     this.tenantId = localStorage.getItem('tenant_id') || localStorage.getItem('login_hotel_id') || localStorage.getItem('hotel_id');
-  }
-
-  // Set hotel ID
-  setHotelId(hotelId: string): void {
-    this.hotelId = hotelId;
-    localStorage.setItem('hotel_id', hotelId);
-  }
-
-  // Get hotel ID
-  getHotelId(): string | null {
-    return this.hotelId;
-  }
-
-  // Clear hotel ID
-  clearHotelId(): void {
-    this.hotelId = null;
-    localStorage.removeItem('hotel_id');
   }
 
   // Set tenant ID
@@ -579,12 +559,7 @@ class APIService {
     }
 
     // Always include tenant-related headers
-    // Use tenantId from localStorage, fallback to hotel1 as default
-    const tenantValue = this.tenantId || 'hotel1';
-    headers['X-Tenant-ID'] = tenantValue;
-    headers['X-Hotel-ID'] = tenantValue;
-    headers['tenantId'] = tenantValue;
-    headers['X-TENANT-ID'] = tenantValue; // Uppercase version for compatibility
+    headers['X-Tenant-ID'] = 'hotel1';
 
     return headers;
   }
@@ -648,8 +623,6 @@ class APIService {
         headers: {
           Authorization: authorization ? `${authorization.slice(0, 20)}...` : 'Not set',
           'X-Tenant-ID': tenantId || 'Not set',
-          'X-Hotel-ID': requestHeaders.get('x-hotel-id') || 'Not set',
-          'tenantId': requestHeaders.get('tenantid') || 'Not set',
           'Content-Type': contentType || 'Not set',
         }
       });

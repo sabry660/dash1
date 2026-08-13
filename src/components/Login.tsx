@@ -44,11 +44,8 @@ export default function Login({ onLoginSuccess }: LoginProps) {
         password: password,
       };
 
-      // Set hotel ID before login request
-      const resolvedTenantId = hotelId || "hotel1";
-      apiService.setHotelId(resolvedTenantId);
-
       // Use the selected hotel as the tenant for all protected endpoints
+      const resolvedTenantId = hotelId || "hotel1";
       apiService.setTenantId(resolvedTenantId);
 
       // Save login request to localStorage
