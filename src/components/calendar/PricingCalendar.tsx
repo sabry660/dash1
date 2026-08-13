@@ -2,8 +2,6 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronLeft, ChevronRight, Calendar, Loader2, AlertCircle, DollarSign, RefreshCw, X, Save, Bed } from 'lucide-react';
 import { apiService, RoomCategoryResponse, DailyRateResponse, RoomResponse, StayDetailsResponse } from '../../services/api';
-import CalendarHeader from './CalendarHeader';
-import TodayIndicator from './TodayIndicator';
 import CalendarSkeleton from './CalendarSkeleton';
 
 const DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -359,125 +357,138 @@ export default function PricingCalendar() {
       </div>
 
       {/* Calendar Container */}
-      <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-        {/* Calendar Header */}
-        <CalendarHeader
-          dates={dateRangeDates}
-          dayNames={DAY_NAMES}
-          monthNames={MONTH_NAMES}
-          isToday={isToday}
-        />
+      <div className="space-y-6">
+        {categoryRates.map(({ category, rates, rooms: categoryRooms }) => {
+          const dailyOccupancy = calculateDailyOccupancy(category.id, dateRangeDates);
+          const totalRooms = categoryRooms.length;
 
-        {/* Calendar Body */}
-        <div className="flex">
-          {/* Category Column */}
-          <div className="w-80 flex-shrink-0 border-l border-gray-200 bg-gray-50">
-            <div className="sticky top-0 bg-gray-50 border-b border-gray-200 p-4">
-              <h3 className="text-sm font-bold text-gray-700">التصنيفات</h3>
-            </div>
-            <div className="overflow-y-auto max-h-[600px]">
-              {categoryRates.map(({ category }) => (
-                <div key={category.id} className="border-b border-gray-200">
-                  <button
-                    onClick={() => toggleCategory(category.id)}
-                    className="w-full p-4 flex items-center justify-between hover:bg-gray-100 transition"
-                  >
-                    <div className="flex items-center gap-2">
-                      <motion.div
-                        animate={{ rotate: expandedCategories.has(category.id) ? 180 : 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <ChevronLeft size={16} className="text-gray-500" />
-                      </motion.div>
-                      <span className="text-sm font-bold text-gray-800">{category.name}</span>
-                    </div>
-                    <DollarSign size={16} className="text-gray-500" />
-                  </button>
+          return (
+            <div key={category.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              {/* Category Header */}
+              <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <DollarSign size={18} className="text-[#AA7B30]" />
+                  <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
+                  <span className="text-sm text-gray-500">({totalRooms} غرفة)</span>
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          {/* Pricing Timeline */}
-          <div className="flex-1 overflow-x-auto">
-            <div className="min-w-max">
-              {/* Today Indicator */}
-              <TodayIndicator
-                dates={dateRangeDates}
-                isToday={isToday}
-              />
-
-              {/* Pricing Grid */}
-              <div className="relative">
-                {categoryRates.map(({ category, rates, rooms: categoryRooms }) => {
-                  const dailyOccupancy = calculateDailyOccupancy(category.id, dateRangeDates);
-                  const totalRooms = categoryRooms.length;
-
-                  return (
-                    <div key={category.id}>
-                      {expandedCategories.has(category.id) && (
-                        <div className="flex border-b border-gray-100 h-20 relative">
-                          {dateRangeDates.map((date, dateIndex) => {
-                            const rate = getRateForDate(rates, date);
-                            const occupancy = dailyOccupancy[dateIndex];
-                            return (
-                              <div
-                                key={dateIndex}
-                                onClick={() => handleRateClick(category.id, date, rate)}
-                                className={`flex-shrink-0 w-40 border-r border-gray-100 p-2 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition ${
-                                  isToday(date) ? 'bg-amber-50/30' : ''
-                                }`}
-                              >
-                                {rate ? (
-                                  <div className="text-center group relative w-full">
-                                    <div className="text-sm font-bold text-[#AA7B30] group-hover:text-[#8B6B20] transition">
-                                      {rate.price.toLocaleString('ar-SA')} ريال
-                                    </div>
-                                    
-                                    {/* Occupancy Info */}
-                                    <div className="flex items-center justify-center gap-2 mt-1">
-                                      <div className="flex items-center gap-1 text-xs text-gray-600">
-                                        <Bed size={12} />
-                                        <span className="font-bold">
-                                          {occupancy.occupied}/{totalRooms}
-                                        </span>
-                                      </div>
-                                      <div className={`text-xs font-bold px-2 py-0.5 rounded ${
-                                        occupancy.available > 0 
-                                          ? 'bg-green-100 text-green-700' 
-                                          : 'bg-red-100 text-red-700'
-                                      }`}>
-                                        {occupancy.available} متاح
-                                      </div>
-                                    </div>
-
-                                    {rate.customRate && (
-                                      <div className="text-xs text-blue-600 font-bold mt-1">
-                                        سعر خاص
-                                      </div>
-                                    )}
-                                    
-                                    <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center transition">
-                                      <div className="text-xs font-bold text-[#AA7B30]">تعديل</div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="text-center text-gray-400 text-sm group-hover:text-gray-500 transition">
-                                    —
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
+              {/* Calendar Body */}
+              <div className="relative overflow-x-auto">
+                {/* 4-Row Grid: Day, Available, Occupied, Price */}
+                <div className="min-w-max space-y-0">
+                  {/* Row 1: Days */}
+                  <div className="flex border-b border-gray-200">
+                    {dateRangeDates.map((date, dateIndex) => (
+                      <div
+                        key={`day-${dateIndex}`}
+                        className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-3 text-center ${
+                          isToday(date) ? 'bg-amber-50' : ''
+                        }`}
+                      >
+                        <div className="text-xs font-bold text-gray-500">
+                          {DAY_NAMES[date.getDay()]}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                        <div className={`text-xl font-black mt-1 ${
+                          isToday(date) ? 'text-[#AA7B30]' : 'text-gray-800'
+                        }`}>
+                          {date.getDate()}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Row 2: Available Rooms */}
+                  <div className="flex border-b border-gray-200">
+                    {dateRangeDates.map((date, dateIndex) => {
+                      const occupancy = dailyOccupancy[dateIndex];
+                      return (
+                        <div
+                          key={`available-${dateIndex}`}
+                          className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-3 text-center ${
+                            isToday(date) ? 'bg-amber-50/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-xs text-gray-500">غرف متاحة:</span>
+                            <span className={`text-base font-bold px-2 py-0.5 rounded ${
+                              occupancy.available > 0 
+                                ? 'bg-green-100 text-green-700' 
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {occupancy.available}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Row 3: Occupied Rooms */}
+                  <div className="flex border-b border-gray-200">
+                    {dateRangeDates.map((date, dateIndex) => {
+                      const occupancy = dailyOccupancy[dateIndex];
+                      return (
+                        <div
+                          key={`occupied-${dateIndex}`}
+                          className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-3 text-center ${
+                            isToday(date) ? 'bg-amber-50/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <span className="text-xs text-gray-500">غرف محجوزة:</span>
+                            <span className="text-base font-bold text-gray-800">
+                              {occupancy.occupied}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Row 4: Price */}
+                  <div className="flex">
+                    {dateRangeDates.map((date, dateIndex) => {
+                      const rate = getRateForDate(rates, date);
+                      const isLast = dateIndex === dateRangeDates.length - 1;
+                      return (
+                        <div
+                          key={`price-${dateIndex}`}
+                          onClick={() => handleRateClick(category.id, date, rate)}
+                          className={`flex-shrink-0 w-48 ${isLast ? '' : 'border-r-2 border-gray-200'} p-3 text-center cursor-pointer hover:bg-gray-50 transition group relative ${
+                            isToday(date) ? 'bg-amber-50/30' : ''
+                          }`}
+                        >
+                          {rate ? (
+                            <div className="text-center group relative w-full">
+                              <div className="text-base font-bold text-[#AA7B30] group-hover:text-[#8B6B20] transition">
+                                {rate.price.toLocaleString('ar-SA')} ريال
+                              </div>
+                              
+                              {rate.customRate && (
+                                <div className="text-xs text-blue-600 font-bold mt-1">
+                                  سعر خاص
+                                </div>
+                              )}
+                              
+                              <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center transition">
+                                <div className="text-xs font-bold text-[#AA7B30]">تعديل</div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-400 text-base group-hover:text-gray-500 transition">
+                              —
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          );
+        })}
       </div>
 
       {/* Empty State */}

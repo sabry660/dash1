@@ -14,7 +14,7 @@ export default function TodayIndicator({ dates, isToday }: TodayIndicatorProps) 
     <div
       className="absolute top-0 bottom-0 w-0.5 bg-[#D4AF37] z-10 pointer-events-none"
       style={{
-        left: `${todayIndex * 160 + 80}px` // 160px per day + half day width
+        left: `${todayIndex * 160 + 80}px` // 160px per day (w-40 = 160px) + half day width
       }}
     />
   );
