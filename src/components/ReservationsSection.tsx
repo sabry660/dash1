@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Calendar, User, Plus, Search, XCircle, ChevronLeft, ChevronRight,
   X, Loader2, Building, Clock, DollarSign, Save,
   Check, AlertCircle, Mail, Phone, Globe, CreditCard
 } from 'lucide-react';
-import { apiService, StayDetailsResponse, CreateStayRequest, ReservationRequestResponse, ApproveReservationRequest, RejectReservationRequest, RoomResponse } from '../services/api';
+import { apiService, StayDetailsResponse, CreateStayRequest, ReservationRequestResponse, ApproveReservationRequest, RejectReservationRequest, RoomResponse, RoomCategoryResponse } from '../services/api';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -36,6 +36,8 @@ const MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'م
 
 export default function ReservationsSection({ onCheckout }: { onCheckout?: () => void }) {
   const [stays, setStays] = useState<StayDetailsResponse[]>([]);
+  const [rooms, setRooms] = useState<RoomResponse[]>([]);
+  const [roomCategories, setRoomCategories] = useState<RoomCategoryResponse[]>([]);
   const [reservationRequests, setReservationRequests] = useState<ReservationRequestResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedStay, setSelectedStay] = useState<StayDetailsResponse | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,19 +67,60 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const [checkOut, setCheckOut] = useState('');
   const [adults, setAdults] = useState(2);
   const [children, setChildren] = useState(0);
+  const [scrollPosition, setScrollPosition] = useState(0);
+  const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load stays and reservation requests in parallel
     const loadData = async () => {
       setIsLoading(true);
       await Promise.allSettled([
         loadStays(),
+        loadRooms(),
+        loadRoomCategories(),
         loadReservationRequests()
       ]);
       setIsLoading(false);
     };
     loadData();
   }, []);
+
+  // Year-long calendar spanning from today to end of year
+  const yearCalendarDays = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const endOfYear = new Date(today.getFullYear(), 11, 31);
+    endOfYear.setHours(0, 0, 0, 0);
+    
+    const days: Date[] = [];
+    const current = new Date(today);
+    
+    while (current <= endOfYear) {
+      days.push(new Date(current));
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return days;
+  }, []);
+
+  const todayIndex = useMemo(() => {
+    return yearCalendarDays.findIndex((day) => day.toDateString() === new Date().toDateString());
+  }, [yearCalendarDays]);
+
+  // Auto-scroll to today's position in calendar
+  useEffect(() => {
+    if (calendarScrollRef.current && todayIndex >= 0 && yearCalendarDays.length > 0) {
+      // Calculate the scroll position to center today's column
+      const totalDays = yearCalendarDays.length;
+      const dayWidth = (calendarScrollRef.current.scrollWidth - 220) / totalDays; // 220px is the sticky column width
+      const scrollTarget = Math.max(0, todayIndex * dayWidth - (calendarScrollRef.current.clientWidth - 220 - dayWidth) / 2);
+      
+      // Smooth scroll to today
+      setTimeout(() => {
+        calendarScrollRef.current?.scrollTo({ left: scrollTarget, behavior: 'smooth' });
+      }, 100);
+    }
+  }, [yearCalendarDays, todayIndex]);
 
   const loadStays = async () => {
     setError(null);
@@ -86,6 +130,28 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     } catch (e: any) {
       setError('فشل تحميل الحجوزات');
       setStays([]);
+    }
+  };
+
+  const loadRooms = async () => {
+    try {
+      const response = await apiService.getRooms(undefined, undefined, 0, 200);
+      const roomsList = Array.isArray(response) ? response : (response?.content ?? []);
+      setRooms(roomsList);
+    } catch (e) {
+      console.error('Failed to load rooms:', e);
+      setRooms([]);
+    }
+  };
+
+  const loadRoomCategories = async () => {
+    try {
+      const response = await apiService.getRoomCategories();
+      const categories = Array.isArray(response) ? response : (response?.content ?? []);
+      setRoomCategories(categories);
+    } catch (e) {
+      console.error('Failed to load room categories:', e);
+      setRoomCategories([]);
     }
   };
 
@@ -115,24 +181,24 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     setIsCreating(true);
     setCreateError(null);
     try {
-      const stayData = { 
-        guestName, 
-        phone: '0550000000', 
-        roomNumber: selectedRoomNumber, 
-        numAdults: adults, 
-        numKids: children, 
-        expectedCheckInDate: checkIn, 
-        expectedCheckOutDate: checkOut 
+      const stayData = {
+        guestName,
+        phone: '0550000000',
+        roomNumber: selectedRoomNumber,
+        numAdults: adults,
+        numKids: children,
+        expectedCheckInDate: checkIn,
+        expectedCheckOutDate: checkOut
       };
-      
+
       await apiService.createStay(stayData);
-      
+
       // Update room status to OCCUPIED after booking
       try {
         const roomToUpdate = availableRooms.find((r: RoomResponse) => (r.roomNumber || r.id.toString()) === selectedRoomNumber);
         if (roomToUpdate) {
-          await apiService.updateRoom(roomToUpdate.id, { 
-            roomNumber: roomToUpdate.roomNumber || roomToUpdate.id.toString(), 
+          await apiService.updateRoom(roomToUpdate.id, {
+            roomNumber: roomToUpdate.roomNumber || roomToUpdate.id.toString(),
             categoryId: roomToUpdate.categoryId,
             status: 'OCCUPIED',
             floor: roomToUpdate.floor,
@@ -143,7 +209,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       } catch (updateError) {
         console.error('Failed to update room status:', updateError);
       }
-      
+
       setIsCreateModalOpen(false);
       setGuestName(''); setSelectedRoomNumber(''); setCheckIn(''); setCheckOut(''); setAdults(2); setChildren(0);
       loadStays();
@@ -157,14 +223,14 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const handleCheckIn = async (stayId: number) => {
     try {
       await apiService.checkInStay(stayId);
-    } catch {}
+    } catch { }
     // Always reload to sync with backend state
     loadStays();
   };
   const handleCheckOut = async (stayId: number) => {
     try {
       await apiService.checkOutStay(stayId);
-      
+
       // Update room status to AVAILABLE after checkout
       const stay = stays.find((s: StayDetailsResponse) => s.stayId === stayId);
       if (stay && (stay.roomNumber || stay.roomId)) {
@@ -172,8 +238,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
           const rooms = await apiService.getRooms(undefined, undefined, 0, 100);
           const roomToUpdate = (rooms.content || []).find((r: RoomResponse) => (r.roomNumber || r.id.toString()) === (stay.roomNumber || stay.roomId?.toString()));
           if (roomToUpdate) {
-            await apiService.updateRoom(roomToUpdate.id, { 
-              roomNumber: roomToUpdate.roomNumber || roomToUpdate.id.toString(), 
+            await apiService.updateRoom(roomToUpdate.id, {
+              roomNumber: roomToUpdate.roomNumber || roomToUpdate.id.toString(),
               categoryId: roomToUpdate.categoryId,
               status: 'AVAILABLE',
               floor: roomToUpdate.floor,
@@ -185,7 +251,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
           console.error('Failed to update room status:', updateError);
         }
       }
-    } catch {}
+    } catch { }
     // Always reload to sync with backend state, even on 409
     loadStays();
     if (onCheckout) onCheckout();
@@ -282,21 +348,21 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       // Use expectedCheckInDate if checkInTime is null (for future reservations)
       const checkInDate = s.checkInTime ? new Date(s.checkInTime) : new Date(s.expectedCheckInDate);
       const checkOutDate = new Date(s.expectedCheckOutDate);
-      
+
       if (!checkInDate || !checkOutDate) return false;
-      
+
       // Reset time to midnight for accurate date comparison
       const targetDate = new Date(date);
       targetDate.setHours(0, 0, 0, 0);
-      
+
       const checkInMidnight = new Date(checkInDate);
       checkInMidnight.setHours(0, 0, 0, 0);
-      
+
       const checkOutMidnight = new Date(checkOutDate);
       checkOutMidnight.setHours(0, 0, 0, 0);
-      
+
       const isInRange = targetDate >= checkInMidnight && targetDate <= checkOutMidnight;
-      
+
       return isInRange;
     });
   };
@@ -322,6 +388,86 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
 
   const getStatusColor = (status: string) => STATUS_COLORS[status] || { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-200', dot: 'bg-gray-400' };
   const getStatusLabel = (status: string) => STATUS_LABELS[status] || '—';
+
+  const roomStatusTranslations: Record<string, string> = {
+    AVAILABLE: 'متاحة',
+    OCCUPIED: 'مشغولة',
+    CLEANING: 'تنظيف',
+    MAINTENANCE: 'صيانة'
+  };
+
+  // Wheel scroll handler for smooth horizontal scrolling
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (calendarScrollRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      const container = calendarScrollRef.current;
+      // Smooth scroll horizontally based on vertical wheel movement
+      container.scrollLeft += e.deltaY > 0 ? 100 : -100;
+    }
+  };
+
+  // Synchronize scroll position across header and room rows
+  const handleCalendarScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+    setScrollPosition(container.scrollLeft);
+  };
+
+  const roomGroups = useMemo(() => {
+    const categoryOrder = roomCategories.map(category => category.name);
+    const grouped = new Map<string, RoomResponse[]>();
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    const filteredRooms = rooms.filter((room) => {
+      const categoryName = room.categoryName || 'غير مصنف';
+      const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory;
+      const matchesSearch = !normalizedQuery || room.roomNumber.toLowerCase().includes(normalizedQuery) || categoryName.toLowerCase().includes(normalizedQuery);
+      return matchesCategory && matchesSearch;
+    });
+
+    filteredRooms.sort((a, b) => Number(a.roomNumber) - Number(b.roomNumber) || a.roomNumber.localeCompare(b.roomNumber));
+
+    filteredRooms.forEach((room) => {
+      const categoryName = room.categoryName || 'غير مصنف';
+      if (!grouped.has(categoryName)) grouped.set(categoryName, []);
+      grouped.get(categoryName)!.push(room);
+    });
+
+    return [...grouped.entries()].sort(([left], [right]) => {
+      const leftIndex = categoryOrder.indexOf(left);
+      const rightIndex = categoryOrder.indexOf(right);
+      if (leftIndex === -1 && rightIndex === -1) return left.localeCompare(right, 'ar');
+      if (leftIndex === -1) return 1;
+      if (rightIndex === -1) return -1;
+      return leftIndex - rightIndex;
+    });
+  }, [rooms, roomCategories, searchQuery, selectedCategory]);
+
+  const getCalendarBlock = (stay: StayDetailsResponse) => {
+    const checkInDate = new Date(stay.checkInTime || stay.expectedCheckInDate);
+    const checkOutDate = new Date(stay.expectedCheckOutDate);
+    const calendarStart = new Date(yearCalendarDays[0]);
+    calendarStart.setHours(0, 0, 0, 0);
+    const startOffset = Math.max(0, Math.round((new Date(checkInDate).setHours(0, 0, 0, 0) - calendarStart.getTime()) / 86400000));
+    const endOffset = Math.max(startOffset + 1, Math.round((new Date(checkOutDate).setHours(0, 0, 0, 0) - calendarStart.getTime()) / 86400000));
+    const width = Math.max(1, endOffset - startOffset);
+
+    return {
+      start: startOffset,
+      width,
+      stay,
+      label: stay.guestName,
+      status: stay.status,
+      visible: startOffset < yearCalendarDays.length && endOffset > 0
+    };
+  };
+
+  const getRoomStayBlocks = (room: RoomResponse) => {
+    return stays
+      .filter((stay) => String(stay.roomId) === String(room.id) || stay.roomNumber === room.roomNumber)
+      .map((stay) => getCalendarBlock(stay))
+      .filter((block) => block.visible);
+  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -422,7 +568,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
               جدول
             </button>
           </div>
-          
+
           {/* Calendar View Mode */}
           {displayMode === 'calendar' && (
             <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
@@ -433,7 +579,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
               ))}
             </div>
           )}
-          
+
           <div className="relative">
             <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input type="text" placeholder="بحث..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-white border border-gray-200 focus:border-[#D4AF37] rounded-xl pr-10 pl-4 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none w-40 transition" />
@@ -512,183 +658,153 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
             </div>
           )}
 
-          {/* Calendar View */}
           {displayMode === 'calendar' && (
-            <div className="flex gap-6">
-              {/* Main Calendar (Center) */}
-              <div className="flex-1">
-                {/* Month View */}
-                {viewMode === 'month' && (
-                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                    {/* Day Headers */}
-                    <div className="grid grid-cols-7 border-b border-gray-200">
-                      {DAY_NAMES.map(d => <div key={d} className="p-4 text-center text-sm font-bold text-gray-500">{d}</div>)}
-                    </div>
-                    {/* Calendar Grid */}
-                    <div className="grid grid-cols-7">
-                      {monthDays.map((day, idx) => {
-                        if (day === null) return <div key={`empty-${idx}`} className="min-h-[120px] border-b border-r border-gray-100 bg-gray-50/50" />;
-                        const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
-                        const dayStays = getStaysForDate(date);
-                        const isSelected = selectedDate && isSameDay(date, selectedDate);
-                        return (
-                          <div 
-                            key={day} 
-                            className={`min-h-[120px] border-b border-r border-gray-100 p-2 hover:bg-gray-50 transition cursor-pointer ${isToday(date) ? 'bg-amber-50/50' : ''} ${isSelected ? 'bg-[#D4AF37]/10 border-[#D4AF37]/30' : ''}`} 
-                            onClick={() => setSelectedDate(date)}
-                          >
-                            <div className={`text-sm font-bold mb-2 ${isToday(date) ? 'text-[#AA7B30] bg-[#D4AF37]/10 w-7 h-7 rounded-full flex items-center justify-center' : 'text-gray-600'}`}>{day}</div>
-                            <div className="space-y-1">
-                              {dayStays.slice(0, 3).map(s => {
-                                const sc = getStatusColor(s.status);
-                                return (
-                                  <div 
-                                    key={s.stayId} 
-                                    onClick={e => { e.stopPropagation(); setSelectedStay(s); setIsModalOpen(true); }} 
-                                    className={`text-xs font-bold px-2 py-1 rounded ${sc.bg} ${sc.text} border ${sc.border} cursor-pointer hover:opacity-80 truncate`}
-                                  >
-                                    {s.roomNumber} - {s.guestName}
-                                  </div>
-                                );
-                              })}
-                              {dayStays.length > 3 && <div className="text-xs text-gray-400 text-center">+{dayStays.length - 3} المزيد</div>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+            <div className="overflow-hidden rounded-[26px] border border-[#e8e1d0] bg-white shadow-[0_12px_40px_rgba(17,24,39,0.03)]">
+              {/* Calendar Header Controls */}
+              <div className="flex items-center justify-between gap-3 border-b border-[#f0ebdf] bg-[#fcfaf7] px-4 py-3 md:px-5">
+                <div className="flex items-center gap-2">
+                  <button onClick={() => goToToday()} className="rounded-lg border border-[#d9c279] bg-[#fffaf0] px-3 py-2 text-xs font-bold text-[#7c6121] transition hover:bg-[#fdf1cf]">
+                    اليوم
+                  </button>
+                </div>
 
-                {/* Week View */}
-                {viewMode === 'week' && (
-                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                    <div className="grid grid-cols-7 border-b border-gray-200">
-                      {weekDays.map((d, i) => (
-                        <div key={i} className={`p-4 text-center ${isToday(d) ? 'bg-amber-50' : ''}`}>
-                          <div className="text-xs font-bold text-gray-500">{DAY_NAMES[d.getDay()]}</div>
-                          <div className={`text-lg font-black mt-1 ${isToday(d) ? 'text-[#AA7B30]' : 'text-gray-800'}`}>{d.getDate()}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-7 min-h-[500px]">
-                      {weekDays.map((d, i) => {
-                        const dayStays = getStaysForDate(d);
-                        const isSelected = selectedDate && isSameDay(d, selectedDate);
-                        return (
-                          <div 
-                            key={i} 
-                            className={`border-r border-gray-100 p-3 space-y-2 ${isToday(d) ? 'bg-amber-50/30' : ''} ${isSelected ? 'bg-[#D4AF37]/10' : ''}`}
-                            onClick={() => setSelectedDate(d)}
-                          >
-                            {dayStays.map(s => {
-                              const sc = getStatusColor(s.status);
-                              return (
-                                <div 
-                                  key={s.stayId} 
-                                  onClick={() => { setSelectedStay(s); setIsModalOpen(true); }} 
-                                  className={`p-3 rounded-lg border cursor-pointer hover:shadow-md transition ${sc.bg} ${sc.border}`}
-                                >
-                                  <div className={`text-xs font-bold ${sc.text}`}>{s.roomNumber}</div>
-                                  <div className="text-xs text-gray-600 truncate">{s.guestName}</div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <div className="text-sm font-black text-[#1f2937] md:text-base">
+                  {todayIndex >= 0 ? `من ${yearCalendarDays[0].toLocaleDateString('ar-SA')} إلى ${yearCalendarDays[yearCalendarDays.length - 1].toLocaleDateString('ar-SA')}` : 'تقويم السنة'}
+                </div>
 
-                {/* Day View */}
-                {viewMode === 'day' && (
-                  <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                    <div className={`p-5 border-b border-gray-200 ${isToday(currentDate) ? 'bg-amber-50' : ''}`}>
-                      <div className="text-xl font-black text-gray-900">{DAY_NAMES[currentDate.getDay()]} {currentDate.getDate()} {MONTH_NAMES[currentDate.getMonth()]}</div>
-                    </div>
-                    <div className="p-5 space-y-4">
-                      {getStaysForDate(currentDate).length === 0 ? (
-                        <div className="text-center py-16 text-gray-400 text-sm font-bold">لا توجد حجوزات في هذا اليوم</div>
-                      ) : (
-                        getStaysForDate(currentDate).map(s => {
-                          const sc = getStatusColor(s.status);
-                          return (
-                            <div 
-                              key={s.stayId} 
-                              onClick={() => { setSelectedStay(s); setIsModalOpen(true); }} 
-                              className={`flex items-center justify-between p-5 rounded-xl border cursor-pointer hover:shadow-md transition ${sc.bg} ${sc.border}`}
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center ${sc.bg} border ${sc.border}`}><User size={20} className={sc.text} /></div>
-                                <div>
-                                  <div className="text-base font-bold text-gray-900">{s.guestName}</div>
-                                  <div className="text-sm text-gray-500">غرفة {s.roomNumber} • {s.checkInTime ? new Date(s.checkInTime).toLocaleDateString('ar-SA') : ''} → {s.expectedCheckOutDate ? new Date(s.expectedCheckOutDate).toLocaleDateString('ar-SA') : ''}</div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border ${sc.bg} ${sc.text} ${sc.border}`}>
-                                  <span className={`w-2 h-2 rounded-full ${sc.dot}`}></span>
-                                  {getStatusLabel(s.status)}
-                                </span>
-                                <div className="flex gap-1">
-                                  <button onClick={e => { e.stopPropagation(); handleCheckIn(s.stayId); }} disabled={s.status === 'ACTIVE' || s.status === 'CLOSED' || s.status === 'CANCELLED'} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">دخول</button>
-                                  <button onClick={e => { e.stopPropagation(); handleCheckOut(s.stayId); }} disabled={s.status !== 'ACTIVE'} className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition">مغادرة</button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="بحث"
+                      className="w-36 rounded-xl border border-[#ece7dc] bg-white py-2 pr-9 pl-3 text-sm text-gray-700 outline-none transition focus:border-[#d4af37] md:w-44"
+                    />
                   </div>
-                )}
+
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="rounded-xl border border-[#ece7dc] bg-white px-3 py-2 text-sm text-gray-700 outline-none transition focus:border-[#d4af37]"
+                  >
+                    <option value="all">كل الفئات</option>
+                    {roomCategories.map((category) => (
+                      <option key={category.id} value={category.name}>{category.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              {/* Reservation Details Panel (Right Side) */}
-              {selectedDate && (
-                <div className="w-96 bg-white border border-gray-200 rounded-2xl p-5 h-fit sticky top-4">
-                  <div className="flex justify-between items-center mb-5">
-                    <h3 className="text-lg font-black text-gray-900">حجوزات اليوم</h3>
-                    <button onClick={() => setSelectedDate(null)} className="p-2 hover:bg-gray-100 rounded-lg transition"><X size={18} className="text-gray-500" /></button>
-                  </div>
-                  
-                  <div className="mb-4 pb-4 border-b border-gray-200">
-                    <div className="text-2xl font-black text-[#AA7B30]">{selectedDate.getDate()}</div>
-                    <div className="text-sm text-gray-600">{DAY_NAMES[selectedDate.getDay()]} {MONTH_NAMES[selectedDate.getMonth()]} {selectedDate.getFullYear()}</div>
+              {/* Scrollable Calendar Container */}
+              <div 
+                ref={calendarScrollRef}
+                onWheel={handleWheel}
+                onScroll={handleCalendarScroll}
+                className="overflow-x-auto smooth-scroll"
+                style={{ scrollBehavior: 'smooth' }}
+              >
+                <div className="min-w-min">
+                  {/* Header Row with Dates */}
+                  <div className="grid sticky top-0 z-20 bg-white" style={{ gridTemplateColumns: '220px minmax(0, 1fr)' }}>
+                    <div className="sticky left-0 z-20 border-r border-[#f0ebdf] bg-[#faf8f2] px-3 py-3 text-xs font-bold text-[#6b7280]">
+                      الغرف
+                    </div>
+                    <div className="grid bg-[#faf8f2]" style={{ gridTemplateColumns: `repeat(${yearCalendarDays.length}, minmax(60px, 1fr))` }}>
+                      {yearCalendarDays.map((day, idx) => {
+                        const isCurrent = day.toDateString() === new Date().toDateString();
+                        return (
+                          <div key={day.toISOString()} className={`border-r border-[#f0ebdf] px-2 py-3 text-center ${isCurrent ? 'bg-[#fff9eb]' : 'bg-[#faf8f2]'}`}>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#7a7a7a]">{DAY_NAMES[day.getDay()]}</div>
+                            <div className={`mt-1 text-sm font-black ${isCurrent ? 'text-[#9a7323]' : 'text-[#1f2937]'}`}>{day.getDate()}</div>
+                            <div className="text-[8px] text-gray-400">{MONTH_NAMES[day.getMonth()]}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {getStaysForDate(selectedDate).length === 0 ? (
-                    <div className="text-center py-8 text-gray-400 text-sm font-bold">لا توجد حجوزات في هذا اليوم</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {getStaysForDate(selectedDate).map(s => {
-                        const sc = getStatusColor(s.status);
+                  {/* Empty State */}
+                  {roomGroups.length === 0 && (
+                    <div className="border-t border-[#f0ebdf] bg-white px-6 py-12 text-center text-sm font-bold text-gray-400">
+                      لا توجد غرف متاحة في قاعدة البيانات
+                    </div>
+                  )}
+
+                  {/* Room Groups */}
+                  {roomGroups.map(([categoryName, categoryRooms]) => (
+                    <div key={categoryName} className="border-t border-[#f0ebdf]">
+                      {/* Category Header */}
+                      <div className="grid" style={{ gridTemplateColumns: '220px minmax(0, 1fr)' }}>
+                        <div className="border-r border-[#f0ebdf] bg-[#faf8f2] px-3 py-2 text-sm font-bold text-[#8a6c20]">
+                          {categoryName}
+                        </div>
+                        <div className="bg-[#faf8f2]" />
+                      </div>
+
+                      {/* Room Rows */}
+                      {categoryRooms.map((room) => {
+                        const roomBlocks = getRoomStayBlocks(room);
+                        const roomStatus = roomStatusTranslations[room.status] || 'متاحة';
+                        const roomBadge = room.status === 'AVAILABLE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : room.status === 'OCCUPIED' ? 'bg-red-50 text-red-700 border-red-200' : room.status === 'CLEANING' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200';
+
                         return (
-                          <div 
-                            key={s.stayId}
-                            onClick={() => { setSelectedStay(s); setIsModalOpen(true); }}
-                            className={`p-4 rounded-xl border cursor-pointer hover:shadow-md transition ${sc.bg} ${sc.border}`}
-                          >
-                            <div className="flex justify-between items-start mb-2">
-                              <div className="text-sm font-bold text-gray-900">{s.guestName}</div>
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${sc.bg} ${sc.text} ${sc.border}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${sc.dot}`}></span>
-                                {getStatusLabel(s.status)}
+                          <div key={room.id} className="grid border-t border-[#f0ebdf]" style={{ gridTemplateColumns: '220px minmax(0, 1fr)' }}>
+                            {/* Sticky Room Label */}
+                            <div className="sticky left-0 z-10 flex items-center justify-between gap-2 border-r border-[#f0ebdf] bg-white px-3 py-3">
+                              <div>
+                                <div className="text-sm font-black text-[#1f2937]">{room.roomNumber}</div>
+                                <div className="text-[11px] text-gray-500">{room.categoryName || 'غير مصنف'}</div>
+                              </div>
+                              <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-bold whitespace-nowrap ${roomBadge}`}>
+                                {roomStatus}
                               </span>
                             </div>
-                            <div className="space-y-1 text-xs text-gray-600">
-                              <div className="flex items-center gap-2"><Building size={12} />غرفة {s.roomNumber}</div>
-                              <div className="flex items-center gap-2"><Clock size={12} />{s.checkInTime ? new Date(s.checkInTime).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
-                              <div className="flex items-center gap-2"><User size={12} />{s.numAdults || 0} بالغين</div>
+
+                            {/* Reservation Blocks Container */}
+                            <div className="relative border-l border-[#f0ebdf] bg-white">
+                              <div className="grid" style={{ gridTemplateColumns: `repeat(${yearCalendarDays.length}, minmax(60px, 1fr))`, minHeight: 76 }}>
+                                {yearCalendarDays.map((day, idx) => (
+                                  <div key={`${room.id}-${day.toISOString()}`} className="border-r border-[#f5f1ea] bg-white" />
+                                ))}
+                              </div>
+
+                              {/* Reservation Blocks */}
+                              {roomBlocks.map((block) => {
+                                const statusColor = getStatusColor(block.status);
+                                const left = `${(block.start / yearCalendarDays.length) * 100}%`;
+                                const width = `${Math.max((block.width / yearCalendarDays.length) * 100, 8)}%`;
+
+                                return (
+                                  <button
+                                    key={`${room.id}-${block.stay.stayId}`}
+                                    type="button"
+                                    onClick={() => { setSelectedStay(block.stay); setIsModalOpen(true); }}
+                                    className={`absolute top-3 h-10 overflow-hidden rounded-lg border px-2 py-1 text-right shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#D4AF37] ${statusColor.bg} ${statusColor.border}`}
+                                    style={{ left, width, zIndex: 2 }}
+                                    title={`${block.stay.guestName} • ${block.stay.roomNumber}`}
+                                  >
+                                    <div className="truncate text-[9px] font-black text-gray-900">{block.stay.guestName}</div>
+                                    <div className="truncate text-[8px] text-gray-700">{getStatusLabel(block.stay.status)}</div>
+                                  </button>
+                                );
+                              })}
+
+                              {/* Today Indicator Line */}
+                              {todayIndex >= 0 && todayIndex < yearCalendarDays.length && (
+                                <div
+                                  className="pointer-events-none absolute inset-y-0 w-[2px] bg-[#d4af37]"
+                                  style={{ left: `${((todayIndex + 0.5) / yearCalendarDays.length) * 100}%`, zIndex: 3 }}
+                                />
+                              )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  )}
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
           )}
         </>
@@ -712,12 +828,14 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                 {/* Status */}
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-gray-500">الحالة الحالية</span>
-                  {(() => { const sc = getStatusColor(selectedStay.status); return (
-                    <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold border ${sc.bg} ${sc.text} ${sc.border}`}>
-                      <span className={`w-2.5 h-2.5 rounded-full ${sc.dot}`}></span>
-                      {getStatusLabel(selectedStay.status)}
-                    </span>
-                  ); })()}
+                  {(() => {
+                    const sc = getStatusColor(selectedStay.status); return (
+                      <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-bold border ${sc.bg} ${sc.text} ${sc.border}`}>
+                        <span className={`w-2.5 h-2.5 rounded-full ${sc.dot}`}></span>
+                        {getStatusLabel(selectedStay.status)}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* Guest Info */}
@@ -792,7 +910,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-bold text-gray-700">تقييم الضيف</span>
                       <div className="flex items-center gap-1">
-                        {[1,2,3,4,5].map(s => (
+                        {[1, 2, 3, 4, 5].map(s => (
                           <span key={s} className={`text-lg ${s <= selectedStay.stars ? 'text-[#D4AF37]' : 'text-gray-300'}`}>★</span>
                         ))}
                         <span className="text-sm font-bold text-gray-600 mr-2">{selectedStay.stars}/5</span>
@@ -1071,6 +1189,6 @@ function InfoItem({ icon, label, value, highlight }: { icon: React.ReactNode; la
 function Field({ label, type = 'text', value, onChange, placeholder }: { label: string; type?: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div><label className="text-sm font-bold text-gray-700 block mb-2">{label}</label>
-    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none transition" /></div>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none transition" /></div>
   );
 }

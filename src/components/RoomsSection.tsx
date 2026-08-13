@@ -342,6 +342,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         name: `Room ${room.roomNumber}`,
         maxAdults: room.maxAdults,
         maxKids: room.maxKids,
+        categoryId: room.categoryId ?? 0,
         image: room.imageUrl || '',
         hasWifi: room.hasWifi,
         numTvs: room.numTvs,
@@ -455,18 +456,20 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   };
 
   const handleUpdateRoom = async () => {
-    if (!editingRoom || !editRoomData.roomNumber || editRoomData.price <= 0) {
-      setUpdateRoomError('يرجى إدخال رقم الغرفة والسعر');
+    if (!editingRoom || !editRoomData.roomNumber || !editRoomData.categoryId || editRoomData.price <= 0) {
+      setUpdateRoomError('يرجى إدخال رقم الغرفة والسعر والفئة');
       return;
     }
 
     setIsUpdatingRoom(true);
     setUpdateRoomError(null);
     try {
-      const roomId = parseInt(editingRoom.id);
+      const roomId = Number(editingRoom.id);
+      const categoryId = Number(editRoomData.categoryId ?? editingRoom.categoryId ?? 0);
+
       await apiService.updateRoom(roomId, {
         roomNumber: editRoomData.roomNumber,
-        categoryId: editRoomData.categoryId,
+        categoryId,
         floor: editRoomData.floor,
         viewType: editRoomData.viewType,
         description: editRoomData.description,
@@ -973,7 +976,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                           numBeds: room.numBeds || 1,
                           bedType: room.bedType || 'DOUBLE' as 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING',
                           status: room.status.toUpperCase() as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE',
-                          categoryId: 0,
+                          categoryId: Number(room.categoryId ?? 0),
                         });
                         setEditRoomImagePreview(room.image || null);
                         setEditRoomModalOpen(true);

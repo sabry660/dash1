@@ -49,3 +49,28 @@
     background: #D4AF37;
   }
 }
+
+@layer components {
+  /* Smooth scroll for calendar */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .smooth-scroll::-webkit-scrollbar {
+    height: 8px;
+  }
+  
+  .smooth-scroll::-webkit-scrollbar-track {
+    background: #F3F4F6;
+  }
+  
+  .smooth-scroll::-webkit-scrollbar-thumb {
+    background: #D4AF37;
+    border-radius: 4px;
+  }
+  
+  .smooth-scroll::-webkit-scrollbar-thumb:hover {
+    background: #C59740;
+  }
+}

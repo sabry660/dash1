@@ -50,9 +50,10 @@ function App() {
         };
         setUserRoleDisplay(roleMap[user.role] || 'المدير');
         
-        // Ensure tenant ID is set when user is logged in
-        if (!localStorage.getItem('tenant_id')) {
-          apiService.setTenantId('hotel1');
+        // Ensure tenant ID is set when user is logged in using the saved hotel selection
+        const savedTenant = localStorage.getItem('login_hotel_id') || localStorage.getItem('tenant_id') || 'hotel1';
+        if (!localStorage.getItem('tenant_id') || localStorage.getItem('tenant_id') !== savedTenant) {
+          apiService.setTenantId(savedTenant);
         }
       } catch (e) {
         setUserRoleDisplay('المدير');
@@ -181,6 +182,8 @@ function App() {
       setIsLoggingIn(false);
       localStorage.setItem('lytc_logged_in', 'true');
       localStorage.setItem('lytc_user', JSON.stringify(user));
+      const tenantId = localStorage.getItem('login_hotel_id') || localStorage.getItem('tenant_id') || 'hotel1';
+      apiService.setTenantId(tenantId);
       // Set session timestamp to check for session validity
       localStorage.setItem('lytc_session_timestamp', Date.now().toString());
     }, 1500);

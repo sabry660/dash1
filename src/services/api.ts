@@ -524,9 +524,9 @@ class APIService {
     // Load token from localStorage on initialization
     this.token = localStorage.getItem('auth_token');
     // Load hotel ID from localStorage on initialization
-    this.hotelId = localStorage.getItem('hotel_id');
+    this.hotelId = localStorage.getItem('hotel_id') || localStorage.getItem('login_hotel_id');
     // Load tenant ID from localStorage on initialization
-    this.tenantId = localStorage.getItem('tenant_id');
+    this.tenantId = localStorage.getItem('tenant_id') || localStorage.getItem('login_hotel_id') || localStorage.getItem('hotel_id');
   }
 
   // Set hotel ID
@@ -574,9 +574,12 @@ class APIService {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    // Always include X-Tenant-ID header if tenantId is available
+    // Always include tenant-related headers if tenantId is available.
+    // Some backends expect either X-Tenant-ID or X-Hotel-ID.
     if (this.tenantId) {
       headers['X-Tenant-ID'] = this.tenantId;
+      headers['X-Hotel-ID'] = this.tenantId;
+      headers['tenantId'] = this.tenantId;
     }
 
     return headers;
@@ -589,6 +592,11 @@ class APIService {
       console.error('API Error Response:', {
         status: response.status,
         statusText: response.statusText,
+        url: response.url,
+        headers: {
+          'Authorization': response.headers.get('authorization') || 'Not received',
+          'X-Tenant-ID': response.headers.get('x-tenant-id') || 'Not received',
+        },
         body: errorBody
       });
       let errorMsg = `خطأ في الخادم (${response.status})`;
@@ -610,12 +618,25 @@ class APIService {
     options: RequestInit = {}
   ): Promise<T> {
     const makeRequest = async (): Promise<Response> => {
+      const headers = {
+        ...this.getHeaders(),
+        ...(options.headers || {}),
+      };
+      
+      // Log the request details for debugging
+      console.log('API Request:', {
+        url,
+        method: options.method || 'GET',
+        headers: {
+          Authorization: headers['Authorization'] ? `Bearer ${headers['Authorization'].substring(0, 20)}...` : 'Not set',
+          'X-Tenant-ID': headers['X-Tenant-ID'] || 'Not set',
+          'Content-Type': headers['Content-Type']
+        }
+      });
+      
       return fetch(url, {
         ...options,
-        headers: {
-          ...this.getHeaders(),
-          ...(options.headers || {}),
-        },
+        headers,
       });
     };
 
@@ -956,20 +977,19 @@ class APIService {
     page: number = 0,
     size: number = 10
   ): Promise<any> {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      size: size.toString(),
-    });
+    const params = new URLSearchParams();
 
+    if (page !== undefined) params.append('page', page.toString());
+    if (size !== undefined) params.append('size', size.toString());
     if (status) params.append('status', status);
     if (floor !== undefined) params.append('floor', floor.toString());
 
-    return this.authenticatedFetch<any>(
-      `${this.baseURL}/api/dashboard/front-desk/rooms?${params.toString()}`,
-      {
-        method: 'GET',
-      }
-    );
+    const query = params.toString();
+    const url = query ? `${this.baseURL}/api/dashboard/front-desk/rooms?${query}` : `${this.baseURL}/api/dashboard/front-desk/rooms`;
+
+    return this.authenticatedFetch<any>(url, {
+      method: 'GET',
+    });
   }
 
   /**
@@ -1458,17 +1478,9 @@ class APIService {
    * Get Room Categories
    * GET /api/dashboard/front-desk/room-categories
    */
-  async getRoomCategories(
-    page: number = 0,
-    size: number = 50
-  ): Promise<any> {
-    const params = new URLSearchParams({
-      page: page.toString(),
-      size: size.toString(),
-    });
-
+  async getRoomCategories(): Promise<any> {
     return this.authenticatedFetch<any>(
-      `${this.baseURL}/api/dashboard/front-desk/room-categories?${params.toString()}`,
+      `${this.baseURL}/api/dashboard/front-desk/room-categories`,
       { method: 'GET' }
     );
   }

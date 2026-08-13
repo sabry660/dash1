@@ -9,6 +9,7 @@ export interface Room {
   pricePerNight: number;
   maxAdults: number;
   maxKids: number;
+  categoryId: number;
   image?: string;
   images?: string[];
   bedType?: 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING';
