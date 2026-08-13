@@ -618,25 +618,31 @@ class APIService {
     options: RequestInit = {}
   ): Promise<T> {
     const makeRequest = async (): Promise<Response> => {
-      const headers = {
-        ...this.getHeaders(),
-        ...(options.headers || {}),
-      };
-      
+      const requestHeaders = new Headers(this.getHeaders());
+      const extraHeaders = new Headers(options.headers || {});
+
+      extraHeaders.forEach((value, key) => {
+        requestHeaders.set(key, value);
+      });
+
+      const authorization = requestHeaders.get('authorization');
+      const tenantId = requestHeaders.get('x-tenant-id');
+      const contentType = requestHeaders.get('content-type');
+
       // Log the request details for debugging
       console.log('API Request:', {
         url,
         method: options.method || 'GET',
         headers: {
-          Authorization: headers['Authorization'] ? `Bearer ${headers['Authorization'].substring(0, 20)}...` : 'Not set',
-          'X-Tenant-ID': headers['X-Tenant-ID'] || 'Not set',
-          'Content-Type': headers['Content-Type']
+          Authorization: authorization ? `${authorization.slice(0, 20)}...` : 'Not set',
+          'X-Tenant-ID': tenantId || 'Not set',
+          'Content-Type': contentType || 'Not set',
         }
       });
-      
+
       return fetch(url, {
         ...options,
-        headers,
+        headers: requestHeaders,
       });
     };
 
