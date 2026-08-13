@@ -71,18 +71,9 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
   const [newRoom, setNewRoom] = useState({
     roomNumber: '',
-    maxAdults: 2,
-    maxKids: 0,
-    description: '',
-    floor: 2,
-    price: 0,
-    roomType: 'SINGLE' as 'SINGLE' | 'DOUBLE' | 'SUITE',
-    hasWifi: true,
-    numTvs: 1,
-    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
-    numBeds: 1,
-    bedType: 'DOUBLE' as 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING',
     categoryId: 0,
+    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
+    floor: 2,
   });
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [createRoomError, setCreateRoomError] = useState<string | null>(null);
@@ -169,8 +160,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
     setIsCategoriesLoading(true);
     setCategoriesError(null);
     try {
-      const response = await apiService.getRoomCategories(0, 100);
-      setRoomCategories(response.content || []);
+      const response = await apiService.getRoomCategories();
+      setRoomCategories(response.content || response || []);
     } catch (error) {
       setCategoriesError('فشل تحميل فئات الغرف');
       console.error('Failed to load room categories:', error);
@@ -309,7 +300,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       await apiService.setRoomCategoryRates(ratesCategory.id, {
         startDate: ratesFromDate,
         endDate: ratesToDate,
-        price: ratesPrice,
+        price: Number(ratesPrice),
       });
       handleLoadRates();
     } catch (e) {
@@ -371,8 +362,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   };
 
   const handleCreateRoom = async () => {
-    if (!newRoom.roomNumber || newRoom.price <= 0) {
-      setCreateRoomError('يرجى إدخال رقم الغرفة والسعر');
+    if (!newRoom.roomNumber || newRoom.categoryId === 0) {
+      setCreateRoomError('يرجى إدخال رقم الغرفة وفئة الغرفة');
       return;
     }
 
@@ -384,7 +375,6 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         categoryId: newRoom.categoryId,
         floor: newRoom.floor,
         viewType: newRoom.viewType,
-        description: newRoom.description,
       });
 
       // Upload image if provided
@@ -411,18 +401,9 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       // Reset form and close modal
       setNewRoom({
         roomNumber: '',
-        maxAdults: 2,
-        maxKids: 0,
-        description: '',
-        floor: 2,
-        price: 0,
-        roomType: 'SINGLE',
-        hasWifi: true,
-        numTvs: 1,
-        viewType: 'CITY',
-        numBeds: 1,
-        bedType: 'DOUBLE',
         categoryId: 0,
+        viewType: 'CITY',
+        floor: 2,
       });
       setRoomImageFile(null);
       setRoomImagePreview(null);
@@ -618,6 +599,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       setRooms(prev => prev.map(r => r.id === roomId ? { ...r, status } : r));
       if (selectedRoom && selectedRoom.id === roomId) {
         setSelectedRoom(prev => prev ? { ...prev, status } : null);
+        // Close the edit modal immediately after status change
+        setSelectedRoom(null);
       }
     } catch (error) {
       // Reload from backend on error to sync state
@@ -879,15 +862,18 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                 </div>
 
                 {/* Room Info */}
-                <div className="p-6 space-y-4">
-                  {/* Price */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-500 text-sm">السعر لليلة</span>
-                    <span className="text-2xl font-black text-[#AA7B30]">{room.pricePerNight ? `${room.pricePerNight.toLocaleString('ar-SA')} ر.س` : 'غير متاح'}</span>
+                <div className="p-6">
+                  {/* Room Number & Category */}
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-2xl font-black text-[#AA7B30]">{room.number}</h3>
+                      <p className="text-sm text-gray-500">{room.categoryName || 'غير محدد'}</p>
+                    </div>
                   </div>
 
-                  {/* Details Grid */}
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  {/* Details - Side by Side */}
+                  <div className="grid grid-cols-2 gap-3 mb-4">
+                    {/* Floor */}
                     <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
                       <Building2 size={16} className="text-gray-400" />
                       <div>
@@ -895,38 +881,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         <span className="font-bold text-gray-800">{room.floor}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <Users size={16} className="text-gray-400" />
-                      <div>
-                        <span className="block text-gray-400 text-xs">بالغين</span>
-                        <span className="font-bold text-gray-800">{room.maxAdults || 'غير متاح'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <Users size={16} className="text-gray-400" />
-                      <div>
-                        <span className="block text-gray-400 text-xs">أطفال</span>
-                        <span className="font-bold text-gray-800">{room.maxKids || 'غير متاح'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <BedDouble size={16} className="text-gray-400" />
-                      <div>
-                        <span className="block text-gray-400 text-xs">نوع السرير</span>
-                        <span className="font-bold text-gray-800">{getBedTypeArabic(room.bedType)}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <span className="text-gray-400">عدد الأسرة:</span>
-                      <span className="font-bold text-gray-800">{room.numBeds || 'غير متاح'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <Tv size={16} className="text-gray-400" />
-                      <div>
-                        <span className="block text-gray-400 text-xs">تلفزيونات</span>
-                        <span className="font-bold text-gray-800">{room.numTvs || 'غير متاح'}</span>
-                      </div>
-                    </div>
+
+                    {/* View Type */}
                     <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
                       <MapPin size={16} className="text-gray-400" />
                       <div>
@@ -934,18 +890,11 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         <span className="font-bold text-gray-800">{getViewTypeArabic(room.viewType)}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <Wifi size={16} className={room.hasWifi ? "text-green-500" : "text-gray-400"} />
-                      <div>
-                        <span className="block text-gray-400 text-xs">واي فاي</span>
-                        <span className="font-bold text-gray-800">{room.hasWifi ? 'متاح' : 'غير متاح'}</span>
-                      </div>
-                    </div>
                   </div>
 
+                  {/* Description */}
                   {room.description && (
-                    <div className="bg-gray-50 p-3 rounded-xl">
-                      <span className="block text-gray-400 text-xs mb-1">الوصف</span>
+                    <div className="bg-gray-50 p-3 rounded-xl mb-4">
                       <p className="text-sm text-gray-700 line-clamp-2 leading-relaxed">{room.description}</p>
                     </div>
                   )}
@@ -1911,31 +1860,16 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                     />
                   </div>
 
-                  {/* Room Type */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">نوع الغرفة *</label>
-                    <select
-                      value={newRoom.roomType}
-                      onChange={(e) => setNewRoom({ ...newRoom, roomType: e.target.value as any })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      disabled={isCreatingRoom}
-                    >
-                      <option value="SINGLE">غرفة فردية</option>
-                      <option value="DOUBLE">غرفة مزدوجة</option>
-                      <option value="SUITE">جناح</option>
-                    </select>
-                  </div>
-
                   {/* Room Category */}
                   <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">فئة الغرفة</label>
+                    <label className="text-xs font-bold text-gray-400 block mb-2">فئة الغرفة *</label>
                     <select
                       value={newRoom.categoryId}
                       onChange={(e) => setNewRoom({ ...newRoom, categoryId: parseInt(e.target.value) })}
                       className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
                       disabled={isCreatingRoom}
                     >
-                      <option value={0}>بدون فئة</option>
+                      <option value={0}>اختر فئة الغرفة</option>
                       {roomCategories.map((cat) => (
                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                       ))}
@@ -1944,7 +1878,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
 
                   {/* Floor */}
                   <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">الطابق</label>
+                    <label className="text-xs font-bold text-gray-400 block mb-2">الطابق *</label>
                     <select
                       value={newRoom.floor}
                       onChange={(e) => setNewRoom({ ...newRoom, floor: parseInt(e.target.value) })}
@@ -1955,89 +1889,6 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         <option key={floor} value={floor}>الطابق {floor}</option>
                       ))}
                     </select>
-                  </div>
-
-                  {/* Price */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">السعر لليلة *</label>
-                    <input
-                      type="number"
-                      value={newRoom.price}
-                      onChange={(e) => setNewRoom({ ...newRoom, price: parseFloat(e.target.value) || 0 })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      placeholder="مثال: 500"
-                      min="0"
-                      step="0.01"
-                      disabled={isCreatingRoom}
-                    />
-                  </div>
-
-                  {/* Max Adults */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">أقصى عدد بالغين *</label>
-                    <input
-                      type="number"
-                      value={newRoom.maxAdults}
-                      onChange={(e) => setNewRoom({ ...newRoom, maxAdults: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      min="1"
-                      disabled={isCreatingRoom}
-                    />
-                  </div>
-
-                  {/* Max Kids */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">أقصى عدد أطفال</label>
-                    <input
-                      type="number"
-                      value={newRoom.maxKids}
-                      onChange={(e) => setNewRoom({ ...newRoom, maxKids: parseInt(e.target.value) || 0 })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      min="0"
-                      disabled={isCreatingRoom}
-                    />
-                  </div>
-
-                  {/* Bed Type */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">نوع السرير *</label>
-                    <select
-                      value={newRoom.bedType}
-                      onChange={(e) => setNewRoom({ ...newRoom, bedType: e.target.value as any })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      disabled={isCreatingRoom}
-                    >
-                      <option value="TWIN">سريرين منفصلين</option>
-                      <option value="DOUBLE">سرير مزدوج</option>
-                      <option value="QUEEN">سرير كوين</option>
-                      <option value="KING">سرير كينج</option>
-                    </select>
-                  </div>
-
-                  {/* Number of Beds */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">عدد الأسرة *</label>
-                    <input
-                      type="number"
-                      value={newRoom.numBeds}
-                      onChange={(e) => setNewRoom({ ...newRoom, numBeds: parseInt(e.target.value) || 1 })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      min="1"
-                      disabled={isCreatingRoom}
-                    />
-                  </div>
-
-                  {/* Number of TVs */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">عدد التلفزيونات *</label>
-                    <input
-                      type="number"
-                      value={newRoom.numTvs}
-                      onChange={(e) => setNewRoom({ ...newRoom, numTvs: parseInt(e.target.value) || 0 })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      min="0"
-                      disabled={isCreatingRoom}
-                    />
                   </div>
 
                   {/* View Type */}
@@ -2058,19 +1909,6 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                       <option value="RIVER">النهر</option>
                       <option value="LANDMARK">معلم سياحي</option>
                     </select>
-                  </div>
-
-                  {/* Wi-Fi */}
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="checkbox"
-                      id="hasWifi"
-                      checked={newRoom.hasWifi}
-                      onChange={(e) => setNewRoom({ ...newRoom, hasWifi: e.target.checked })}
-                      className="w-5 h-5 rounded border-gray-300 text-[#D4AF37] focus:ring-[#D4AF37]"
-                      disabled={isCreatingRoom}
-                    />
-                    <label htmlFor="hasWifi" className="text-xs font-bold text-gray-400">متاح Wi-Fi</label>
                   </div>
 
                   {/* Room Image Upload */}
@@ -2116,19 +1954,6 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Description */}
-                  <div>
-                    <label className="text-xs font-bold text-gray-400 block mb-2">الوصف</label>
-                    <textarea
-                      value={newRoom.description}
-                      onChange={(e) => setNewRoom({ ...newRoom, description: e.target.value })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none resize-none"
-                      rows={3}
-                      placeholder="وصف الغرفة..."
-                      disabled={isCreatingRoom}
-                    />
                   </div>
 
                   <div className="flex gap-3 pt-4 border-t border-gray-200">

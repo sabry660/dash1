@@ -10,6 +10,7 @@ export interface Room {
   maxAdults: number;
   maxKids: number;
   categoryId: number;
+  categoryName?: string;
   image?: string;
   images?: string[];
   bedType?: 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING';

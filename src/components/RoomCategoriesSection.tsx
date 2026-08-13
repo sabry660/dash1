@@ -34,8 +34,8 @@ export default function RoomCategoriesSection() {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await apiService.getRoomCategories(0, 100);
-      setCategories(response.content || []);
+      const response = await apiService.getRoomCategories();
+      setCategories(response.content || response || []);
     } catch (e) {
       setError('فشل تحميل فئات الغرف');
       setCategories([]);

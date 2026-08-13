@@ -6,8 +6,10 @@ import {
   Check, AlertCircle, Mail, Phone, Globe, CreditCard
 } from 'lucide-react';
 import { apiService, StayDetailsResponse, CreateStayRequest, ReservationRequestResponse, ApproveReservationRequest, RejectReservationRequest, RoomResponse, RoomCategoryResponse } from '../services/api';
+import PricingCalendar from './calendar/PricingCalendar';
 
 type ViewMode = 'month' | 'week' | 'day';
+type CalendarView = 'traditional' | 'horizontal' | 'pricing';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
   'RESERVED': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200', dot: 'bg-green-500' },
@@ -44,6 +46,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
+  const [calendarView, setCalendarView] = useState<CalendarView>('traditional');
   const [viewMode, setViewMode] = useState<ViewMode>('month');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -84,6 +87,17 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     loadData();
   }, []);
 
+  // Retry failed requests automatically
+  useEffect(() => {
+    const retryInterval = setInterval(() => {
+      if (stays.length === 0) loadStays();
+      if (rooms.length === 0) loadRooms();
+      if (roomCategories.length === 0) loadRoomCategories();
+      if (reservationRequests.length === 0) loadReservationRequests();
+    }, 15000); // Retry every 15 seconds (slower to avoid spamming backend)
+    return () => clearInterval(retryInterval);
+  }, [stays.length, rooms.length, roomCategories.length, reservationRequests.length]);
+
   // Year-long calendar spanning from today to end of year
   const yearCalendarDays = useMemo(() => {
     const today = new Date();
@@ -123,13 +137,13 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   }, [yearCalendarDays, todayIndex]);
 
   const loadStays = async () => {
-    setError(null);
     try {
       const response = await apiService.getStays(0, 200);
       setStays(response.content || []);
     } catch (e: any) {
-      setError('فشل تحميل الحجوزات');
+      console.error('Failed to load stays:', e);
       setStays([]);
+      // Don't set error state - just log and continue
     }
   };
 
@@ -158,10 +172,13 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const loadReservationRequests = async () => {
     try {
       const response = await apiService.getPendingReservationRequests(0, 100);
-      setReservationRequests(response.content || []);
+      // Handle both paged response and direct array response
+      const requests = response?.content || (Array.isArray(response) ? response : []) as ReservationRequestResponse[];
+      setReservationRequests(requests);
     } catch (e: any) {
       console.error('Failed to load reservation requests:', e);
       setReservationRequests([]);
+      // Don't set error state - just log and continue
     }
   };
 
@@ -494,7 +511,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       {showPendingRequests && (
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
           <div className="p-5 border-b border-gray-200 flex justify-between items-center">
-            <h3 className="text-lg font-bold text-gray-900">طلبات الحجوز المعلقة (من صفحة الهبوط)</h3>
+            <h3 className="text-lg font-bold text-gray-900">طلبات الحجوز المعلقة (من الموقع الإلكتروني)</h3>
             <button onClick={() => setShowPendingRequests(false)} className="p-2 hover:bg-gray-100 rounded-lg transition"><X size={18} className="text-gray-500" /></button>
           </div>
           {filteredRequests.length === 0 ? (
@@ -547,29 +564,33 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
 
       {/* Calendar Controls */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        {/* Navigation */}
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"><ChevronRight size={18} className="text-gray-600" /></button>
-          <button onClick={goToToday} className="px-4 py-2 border border-[#D4AF37] text-[#AA7B37] bg-white rounded-xl text-sm font-bold hover:bg-amber-50 transition">اليوم</button>
-          <button onClick={() => navigate(1)} className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"><ChevronLeft size={18} className="text-gray-600" /></button>
-          <h2 className="text-lg font-black text-gray-900 mr-2">
-            {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
-          </h2>
-        </div>
-
-        {/* View Mode + Display Mode + Search + Filter */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Display Mode Toggle */}
-          <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
-            <button onClick={() => setDisplayMode('calendar')} className={`px-4 py-2 text-sm font-bold transition ${displayMode === 'calendar' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-              تقويم
-            </button>
-            <button onClick={() => setDisplayMode('table')} className={`px-4 py-2 text-sm font-bold transition ${displayMode === 'table' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-              جدول
-            </button>
+        {/* Navigation - Hide in pricing and table view */}
+        {calendarView !== 'pricing' && displayMode !== 'table' && (
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate(-1)} className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"><ChevronRight size={18} className="text-gray-600" /></button>
+            <button onClick={goToToday} className="px-4 py-2 border border-[#D4AF37] text-[#AA7B37] bg-white rounded-xl text-sm font-bold hover:bg-amber-50 transition">اليوم</button>
+            <button onClick={() => navigate(1)} className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"><ChevronLeft size={18} className="text-gray-600" /></button>
+            <h2 className="text-lg font-black text-gray-900 mr-2">
+              {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
+            </h2>
           </div>
+        )}
 
-          {/* Calendar View Mode */}
+        {/* Right side controls */}
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Display Mode Toggle - Hide in pricing view */}
+          {calendarView !== 'pricing' && (
+            <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
+              <button onClick={() => setDisplayMode('calendar')} className={`px-4 py-2 text-sm font-bold transition ${displayMode === 'calendar' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                تقويم
+              </button>
+              <button onClick={() => setDisplayMode('table')} className={`px-4 py-2 text-sm font-bold transition ${displayMode === 'table' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                جدول
+              </button>
+            </div>
+          )}
+
+          {/* Calendar View Mode - Hide in table view */}
           {displayMode === 'calendar' && (
             <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
               {(['month', 'week', 'day'] as ViewMode[]).map(v => (
@@ -580,18 +601,36 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
             </div>
           )}
 
-          <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input type="text" placeholder="بحث..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-white border border-gray-200 focus:border-[#D4AF37] rounded-xl pr-10 pl-4 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none w-40 transition" />
-          </div>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-600 focus:outline-none focus:border-[#D4AF37]">
-            <option value="all">الكل</option>
-            <option value="RESERVED">محجوز</option>
-            <option value="ACTIVE">نشط</option>
-            <option value="CLOSED">مغلق</option>
-            <option value="CANCELLED">ملغي</option>
-            <option value="NO_SHOW">لم يحضر</option>
-          </select>
+          {/* Calendar Type Toggle - Always show on left side */}
+          {displayMode === 'calendar' && (
+            <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
+              <button onClick={() => setCalendarView('traditional')} className={`px-4 py-2 text-sm font-bold transition ${calendarView === 'traditional' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                تقليدي
+              </button>
+            
+              <button onClick={() => setCalendarView('pricing')} className={`px-4 py-2 text-sm font-bold transition ${calendarView === 'pricing' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+                الأسعار
+              </button>
+            </div>
+          )}
+
+          {/* Search and Filter - Hide in pricing and table view */}
+          {calendarView !== 'pricing' && displayMode === 'calendar' && (
+            <>
+              <div className="relative">
+                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input type="text" placeholder="بحث..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-white border border-gray-200 focus:border-[#D4AF37] rounded-xl pr-10 pl-4 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none w-40 transition" />
+              </div>
+              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-600 focus:outline-none focus:border-[#D4AF37]">
+                <option value="all">الكل</option>
+                <option value="RESERVED">محجوز</option>
+                <option value="ACTIVE">نشط</option>
+                <option value="CLOSED">مغلق</option>
+                <option value="CANCELLED">ملغي</option>
+                <option value="NO_SHOW">لم يحضر</option>
+              </select>
+            </>
+          )}
         </div>
       </div>
 
@@ -608,42 +647,62 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
           {/* Table View (Existing) */}
           {displayMode === 'table' && (
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              <div className="p-5 border-b border-gray-200">
+                <h3 className="text-lg font-bold text-gray-900">طلبات الحجوز من الموقع الإلكتروني</h3>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">رقم الحجز</th>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">اسم الضيف</th>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">رقم الغرفة</th>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">تاريخ الدخول</th>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">تاريخ المغادرة</th>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">الحالة</th>
-                      <th className="px-6 py-4 text-right text-xs font-bold text-gray-500">الإجراءات</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">رقم الطلب</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">اسم الضيف</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">البريد الإلكتروني</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">الهاتف</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">الجنسية</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">رقم الهوية</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">فئة الغرفة</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">بالغين</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">أطفال</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">السعر المقدر</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">تاريخ الدخول</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">تاريخ المغادرة</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">ملاحظات</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">الحالة</th>
+                      <th className="px-4 py-3 text-right text-xs font-bold text-gray-500">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {filteredStays.map(s => {
-                      const sc = getStatusColor(s.status);
+                    {filteredRequests.map(request => {
+                      const sc = STATUS_COLORS[request.status] || STATUS_COLORS['PENDING'];
                       return (
-                        <tr key={s.stayId} className="hover:bg-gray-50 transition cursor-pointer" onClick={() => { setSelectedStay(s); setIsModalOpen(true); }}>
-                          <td className="px-6 py-4 text-sm font-bold text-gray-900">#{s.stayId}</td>
-                          <td className="px-6 py-4 text-sm text-gray-800">{s.guestName}</td>
-                          <td className="px-6 py-4 text-sm text-gray-800">{s.roomNumber}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{s.checkInTime ? new Date(s.checkInTime).toLocaleDateString('ar-SA') : (s.expectedCheckInDate ? new Date(s.expectedCheckInDate).toLocaleDateString('ar-SA') : 'غير متاح')}</td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{s.expectedCheckOutDate ? new Date(s.expectedCheckOutDate).toLocaleDateString('ar-SA') : 'غير متاح'}</td>
-                          <td className="px-6 py-4">
+                        <tr key={request.id} className="hover:bg-gray-50 transition">
+                          <td className="px-4 py-3 text-sm font-bold text-gray-900">#{request.id}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800">{request.guestName}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{request.guestEmail}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{request.guestPhone}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{request.nationality || 'غير محدد'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{request.identification || 'غير محدد'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800">{request.categoryName}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{request.numAdults || 0}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{request.numKids || 0}</td>
+                          <td className="px-4 py-3 text-sm text-gray-800">{request.quotedTotalCharge?.toLocaleString('ar-SA')} ريال</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{new Date(request.checkInDate).toLocaleDateString('ar-SA')}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{new Date(request.checkOutDate).toLocaleDateString('ar-SA')}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600 max-w-xs truncate">{request.notes || '-'}</td>
+                          <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${sc.bg} ${sc.text} ${sc.border}`}>
                               <span className={`w-2 h-2 rounded-full ${sc.dot}`}></span>
-                              {getStatusLabel(s.status)}
+                              {STATUS_LABELS[request.status] || request.status}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-3">
                             <div className="flex gap-2">
-                              {s.status === 'RESERVED' ? (
-                                <button onClick={e => { e.stopPropagation(); handleCheckIn(s.stayId); }} className="px-3 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg text-xs font-bold hover:bg-blue-100 transition">دخول</button>
-                              ) : s.status === 'ACTIVE' ? (
-                                <button onClick={e => { e.stopPropagation(); handleCheckOut(s.stayId); }} className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition">مغادرة</button>
-                              ) : null}
+                              {request.status === 'PENDING' && (
+                                <>
+                                  <button onClick={() => openApproveModal(request)} className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition">قبول</button>
+                                  <button onClick={() => openRejectModal(request)} className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition">رفض</button>
+                                </>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -652,13 +711,13 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                   </tbody>
                 </table>
               </div>
-              {filteredStays.length === 0 && (
-                <div className="text-center py-12 text-gray-400 text-sm font-bold">لا توجد حجوزات</div>
+              {filteredRequests.length === 0 && (
+                <div className="text-center py-12 text-gray-400 text-sm font-bold">لا توجد طلبات حجز من الموقع الإلكتروني</div>
               )}
             </div>
           )}
 
-          {displayMode === 'calendar' && (
+          {displayMode === 'calendar' && calendarView === 'traditional' && (
             <div className="overflow-hidden rounded-[26px] border border-[#e8e1d0] bg-white shadow-[0_12px_40px_rgba(17,24,39,0.03)]">
               {/* Calendar Header Controls */}
               <div className="flex items-center justify-between gap-3 border-b border-[#f0ebdf] bg-[#fcfaf7] px-4 py-3 md:px-5">
@@ -806,6 +865,11 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Pricing Calendar View */}
+          {displayMode === 'calendar' && calendarView === 'pricing' && (
+            <PricingCalendar />
           )}
         </>
       )}

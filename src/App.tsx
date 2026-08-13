@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Building, User, LogOut, Sparkles, Menu, X,
-  Calendar, BedDouble, Coffee, BarChart3, ShoppingBag, Bot, Layers
+  Calendar, BedDouble, Bot
 } from 'lucide-react';
 
 import Login from './components/Login';
@@ -10,17 +10,12 @@ import DashboardHome from './components/DashboardHome';
 import RoomsSection from './components/RoomsSection';
 import ReservationsSection from './components/ReservationsSection';
 import GuestsSection from './components/GuestsSection';
-import OrdersSection from './components/OrdersSection';
-import UsersManagementSection from './components/UsersManagementSection';
-import SpecialOrdersManagementSection from './components/SpecialOrdersManagementSection';
-import RestaurantStatsSection from './components/RestaurantStatsSection';
-import CafeStatsSection from './components/CafeStatsSection';
 import SpecialOffersSection from './components/SpecialOffersSection';
 import AIAssistantSection from './components/AIAssistantSection';
 import { ThemeProvider } from './contexts/ThemeContext';
 
 import { apiService } from './services/api';
-import { Reservation, Guest, RestaurantOrder } from './types';
+import { Reservation, Guest } from './types';
 
 function App() {
   // Authentication & Loading States
@@ -62,7 +57,7 @@ function App() {
   }, []);
 
   // Active view tab state with # routing
-  const [activeTab, setActiveTab] = useState<'لوحة التحكم' | 'الحجوزات' | 'الغرف' | 'النزلاء' | 'الطلبات' | 'إدارة المستخدمين' | 'الطلبات الخاصة' | 'إحصائيات المطعم' | 'إحصائيات المقهى' | 'العروض والمزايا' | 'المساعد الذكي'>(() => {
+  const [activeTab, setActiveTab] = useState<'لوحة التحكم' | 'الحجوزات' | 'الغرف' | 'النزلاء' | 'العروض والمزايا' | 'المساعد الذكي'>(() => {
     const hash = window.location.hash.replace('#', '');
     if (hash) {
       try {
@@ -80,13 +75,8 @@ function App() {
       { label: 'لوحة التحكم', icon: <Building size={16} />, roles: ['MANAGER', 'STAFF', 'CHEF', 'BARISTA', 'ROOM_SERVICE'] },
       { label: 'الحجوزات', icon: <Calendar size={16} />, roles: ['MANAGER', 'STAFF'] },
       { label: 'الغرف', icon: <BedDouble size={16} />, roles: ['MANAGER', 'STAFF', 'ROOM_SERVICE'] },
-      { label: 'الطلبات', icon: <Coffee size={16} />, roles: ['MANAGER', 'STAFF', 'CHEF'] },
       { label: 'المساعد الذكي', icon: <Bot size={16} />, roles: ['MANAGER', 'STAFF', 'CHEF', 'BARISTA', 'ROOM_SERVICE'] },
-      { label: 'العروض والمزايا', icon: <Sparkles size={16} />, roles: ['MANAGER', 'STAFF'] },
-      { label: 'إدارة المستخدمين', icon: <User size={16} />, roles: ['MANAGER'] },
-      { label: 'الطلبات الخاصة', icon: <ShoppingBag size={16} />, roles: ['MANAGER', 'STAFF'] },
-      { label: 'إحصائيات المطعم', icon: <BarChart3 size={16} />, roles: ['MANAGER', 'CHEF'] },
-      { label: 'إحصائيات المقهى', icon: <BarChart3 size={16} />, roles: ['MANAGER', 'BARISTA'] }
+      { label: 'العروض والمزايا', icon: <Sparkles size={16} />, roles: ['MANAGER', 'STAFF'] }
     ];
 
     if (!role) return allTabs.filter(tab => tab.roles.includes('MANAGER'));
@@ -135,10 +125,6 @@ function App() {
     const saved = localStorage.getItem('lytc_guests');
     return saved ? JSON.parse(saved) : [];
   });
-  const [orders, setOrders] = useState<RestaurantOrder[]>(() => {
-    const saved = localStorage.getItem('lytc_orders');
-    return saved ? JSON.parse(saved) : [];
-  });
 
   // UI Notifications dropdown & Global search
   const [notifications, setNotifications] = useState<{ id: string; title: string; time: string; read: boolean }[]>([
@@ -161,10 +147,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('lytc_guests', JSON.stringify(guests));
   }, [guests]);
-
-  useEffect(() => {
-    localStorage.setItem('lytc_orders', JSON.stringify(orders));
-  }, [orders]);
 
   // Handle simulate luxury booting loading screen
   useEffect(() => {
@@ -273,12 +255,6 @@ function App() {
     ]);
   };
 
-
-
-  const handleUpdateOrderStatus = (orderId: string, status: RestaurantOrder['status']) => {
-    setOrders((prev: RestaurantOrder[]) => prev.map((o: RestaurantOrder) => o.id === orderId ? { ...o, status } : o));
-  };
-
   // Render modular views
   const renderActiveView = () => {
     switch (activeTab) {
@@ -295,18 +271,8 @@ function App() {
         return <ReservationsSection />;
       case 'النزلاء':
         return <GuestsSection guests={guests} reservations={reservations} />;
-      case 'الطلبات':
-        return <OrdersSection />;
       case 'المساعد الذكي':
         return <AIAssistantSection />;
-      case 'إدارة المستخدمين':
-        return <UsersManagementSection />;
-      case 'الطلبات الخاصة':
-        return <SpecialOrdersManagementSection />;
-      case 'إحصائيات المطعم':
-        return <RestaurantStatsSection />;
-      case 'إحصائيات المقهى':
-        return <CafeStatsSection />;
       case 'العروض والمزايا':
         return <SpecialOffersSection />;
     }
