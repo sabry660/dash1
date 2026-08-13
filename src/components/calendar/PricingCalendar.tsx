@@ -465,11 +465,7 @@ export default function PricingCalendar() {
                                 {rate.price.toLocaleString('ar-SA')} ريال
                               </div>
                               
-                              {rate.customRate && (
-                                <div className="text-xs text-blue-600 font-bold mt-1">
-                                  سعر خاص
-                                </div>
-                              )}
+                              
                               
                               <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center transition">
                                 <div className="text-xs font-bold text-[#AA7B30]">تعديل</div>
