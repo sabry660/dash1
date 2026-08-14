@@ -34,11 +34,10 @@ export default function SpecialOffersSection() {
     const cachedData = dataCache.get<SpecialOfferResponse[]>(cacheKey);
     if (cachedData) {
       setOffers(cachedData);
-      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(false); // Don't show loading if we're just refreshing in background
     setError(null);
     
     // Make API request
@@ -48,7 +47,7 @@ export default function SpecialOffersSection() {
         // Sort offers by ID ascending
         const sortedOffers = (response.content || []).sort((a: SpecialOfferResponse, b: SpecialOfferResponse) => a.id - b.id);
         
-        // Only cache successful HTTP 200 responses
+        // Cache all responses (including empty)
         dataCache.set(cacheKey, sortedOffers);
         
         setOffers(sortedOffers);
@@ -75,6 +74,14 @@ export default function SpecialOffersSection() {
   }, []);
 
   useEffect(() => {
+    // Load cached data immediately first
+    const offersCache = dataCache.get<SpecialOfferResponse[]>(cacheKeys.specialOffers.offers());
+    if (offersCache) {
+      setOffers(offersCache);
+      setIsLoading(false);
+    }
+
+    // Then load fresh data in background
     loadOffers();
   }, [loadOffers]);
 

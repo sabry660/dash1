@@ -56,11 +56,47 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   const [rooms, setRooms] = useState<Room[]>(initialRooms);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | Room['status']>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedFloor, setSelectedFloor] = useState<number | 'all'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'number' | 'price' | 'floor' | 'status'>('number');
+  const [filter, setFilter] = useState<'all' | Room['status']>(() => {
+    const saved = localStorage.getItem('rooms_filter');
+    return (saved === 'all' || saved === 'AVAILABLE' || saved === 'OCCUPIED' || saved === 'CLEANING' || saved === 'MAINTENANCE') ? saved : 'all';
+  });
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const saved = localStorage.getItem('rooms_viewMode');
+    return (saved === 'grid' || saved === 'list') ? saved : 'grid';
+  });
+  const [selectedFloor, setSelectedFloor] = useState<number | 'all'>(() => {
+    const saved = localStorage.getItem('rooms_selectedFloor');
+    return saved === 'all' ? 'all' : parseInt(saved) || 'all';
+  });
+  const [searchQuery, setSearchQuery] = useState(() => {
+    const saved = localStorage.getItem('rooms_searchQuery');
+    return saved || '';
+  });
+  const [sortBy, setSortBy] = useState<'number' | 'price' | 'floor' | 'status'>(() => {
+    const saved = localStorage.getItem('rooms_sortBy');
+    return (saved === 'number' || saved === 'price' || saved === 'floor' || saved === 'status') ? saved : 'number';
+  });
+
+  // Save state to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('rooms_filter', filter);
+  }, [filter]);
+
+  useEffect(() => {
+    localStorage.setItem('rooms_viewMode', viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem('rooms_selectedFloor', selectedFloor.toString());
+  }, [selectedFloor]);
+
+  useEffect(() => {
+    localStorage.setItem('rooms_searchQuery', searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    localStorage.setItem('rooms_sortBy', sortBy);
+  }, [sortBy]);
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [selectedRooms, setSelectedRooms] = useState<Set<string>>(new Set());
@@ -152,7 +188,18 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   const floors = [2, 3, 4, 5];
 
   useEffect(() => {
-    // Load rooms and categories in parallel
+    // Load cached data immediately first
+    const loadCachedData = () => {
+      const roomsCache = dataCache.get<Room[]>(cacheKeys.rooms.rooms(filter, selectedFloor));
+      const categoriesCache = dataCache.get<any[]>(cacheKeys.rooms.roomCategories());
+
+      if (roomsCache) setRooms(roomsCache);
+      if (categoriesCache) setRoomCategories(categoriesCache);
+    };
+
+    loadCachedData();
+
+    // Then load fresh data in background
     loadRooms();
     loadRoomCategories();
   }, [filter, selectedFloor]);
@@ -174,9 +221,9 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       return;
     }
 
-    // Check cache first
+    // Check cache first - use cached data regardless of length
     const cachedData = dataCache.get<any[]>(cacheKey);
-    if (cachedData && cachedData.length > 0) {
+    if (cachedData) {
       setRoomCategories(cachedData);
       setIsCategoriesLoading(false);
       return;
@@ -191,10 +238,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         const response = await apiService.getRoomCategories();
         const categories = response.content || response || [];
         
-        // Only cache successful responses
-        if (categories.length > 0) {
-          dataCache.set(cacheKey, categories);
-        }
+        // Cache all responses (including empty)
+        dataCache.set(cacheKey, categories);
         
         setRoomCategories(categories);
       } catch (error) {
@@ -362,9 +407,9 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       return;
     }
 
-    // Check cache first - use cached data regardless of age
+    // Check cache first - use cached data regardless of length
     const cachedData = dataCache.get<Room[]>(cacheKey);
-    if (cachedData && cachedData.length > 0) {
+    if (cachedData) {
       setRooms(cachedData);
       setIsLoading(false);
       return;
@@ -410,10 +455,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
           ].filter(Boolean) as string[],
         }));
         
-        // Only cache successful HTTP 200 responses
-        if (transformedRooms.length > 0) {
-          dataCache.set(cacheKey, transformedRooms);
-        }
+        // Cache all responses (including empty)
+        dataCache.set(cacheKey, transformedRooms);
         
         setRooms(transformedRooms);
       } catch (error: any) {

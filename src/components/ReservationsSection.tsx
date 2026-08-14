@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Calendar, User, Plus, Search, XCircle, ChevronLeft, ChevronRight,
+  Calendar, User, Plus, Search, XCircle, ChevronLeft,
   X, Loader2, Building, Clock, DollarSign, Save,
   Check, AlertCircle, Mail, Phone, Globe, CreditCard
 } from 'lucide-react';
@@ -9,7 +9,6 @@ import { apiService, StayDetailsResponse, CreateStayRequest, ReservationRequestR
 import PricingCalendar from './calendar/PricingCalendar';
 import { dataCache, cacheKeys } from '../services/dataCache';
 
-type ViewMode = 'month' | 'week' | 'day';
 type CalendarView = 'traditional' | 'horizontal' | 'pricing';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; border: string; dot: string }> = {
@@ -45,12 +44,34 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>('calendar');
-  const [calendarView, setCalendarView] = useState<CalendarView>('traditional');
-  const [viewMode, setViewMode] = useState<ViewMode>('month');
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+
+  const [displayMode, setDisplayMode] = useState<'calendar' | 'table'>(() => {
+    const saved = localStorage.getItem('reservations_displayMode');
+    return (saved === 'table' || saved === 'calendar') ? saved : 'calendar';
+  });
+  const [calendarView, setCalendarView] = useState<CalendarView>(() => {
+    const saved = localStorage.getItem('reservations_calendarView');
+    return (saved === 'traditional' || saved === 'pricing') ? saved : 'traditional';
+  });
+
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => {
+    const saved = localStorage.getItem('reservations_selectedCategory');
+    return saved || 'all';
+  });
+  const [expandedCalendarCategories, setExpandedCalendarCategories] = useState<Set<string>>(new Set());
+
+  // Save state to localStorage on change
+  useEffect(() => {
+    localStorage.setItem('reservations_displayMode', displayMode);
+  }, [displayMode]);
+
+  useEffect(() => {
+    localStorage.setItem('reservations_calendarView', calendarView);
+  }, [calendarView]);
+
+  useEffect(() => {
+    localStorage.setItem('reservations_selectedCategory', selectedCategory);
+  }, [selectedCategory]);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedStay, setSelectedStay] = useState<StayDetailsResponse | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -75,15 +96,30 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Load cached data immediately first
+    const loadCachedData = () => {
+      const staysCache = dataCache.get<StayDetailsResponse[]>(cacheKeys.reservations.stays());
+      const roomsCache = dataCache.get<RoomResponse[]>(cacheKeys.reservations.rooms());
+      const categoriesCache = dataCache.get<RoomCategoryResponse[]>(cacheKeys.reservations.roomCategories());
+      const requestsCache = dataCache.get<ReservationRequestResponse[]>(cacheKeys.reservations.reservationRequests());
+
+      if (staysCache) setStays(staysCache);
+      if (roomsCache) setRooms(roomsCache);
+      if (categoriesCache) setRoomCategories(categoriesCache);
+      if (requestsCache) setReservationRequests(requestsCache);
+    };
+
+    loadCachedData();
+
+    // Then load fresh data in background
     const loadData = async () => {
-      setIsLoading(true);
+      setIsLoading(false); // Don't show loading if we have cached data
       await Promise.allSettled([
         loadStays(),
         loadRooms(),
         loadRoomCategories(),
         loadReservationRequests()
       ]);
-      setIsLoading(false);
     };
     loadData();
   }, []);
@@ -146,11 +182,10 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       return;
     }
 
-    // Check cache first
+    // Check cache first - use cached data regardless of length
     const cachedData = dataCache.get<StayDetailsResponse[]>(cacheKey);
-    if (cachedData && cachedData.length > 0) {
+    if (cachedData) {
       setStays(cachedData);
-      return;
     }
 
     // Make API request
@@ -159,10 +194,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         const response = await apiService.getStays(0, 200);
         const staysData = response.content || [];
         
-        // Only cache successful responses
-        if (staysData.length > 0) {
-          dataCache.set(cacheKey, staysData);
-        }
+        // Cache all responses (including empty)
+        dataCache.set(cacheKey, staysData);
         
         setStays(staysData);
       } catch (e: any) {
@@ -189,11 +222,10 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       return;
     }
 
-    // Check cache first
+    // Check cache first - use cached data regardless of length
     const cachedData = dataCache.get<RoomResponse[]>(cacheKey);
-    if (cachedData && cachedData.length > 0) {
+    if (cachedData) {
       setRooms(cachedData);
-      return;
     }
 
     // Make API request
@@ -202,10 +234,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         const response = await apiService.getRooms(undefined, undefined, 0, 200);
         const roomsList = Array.isArray(response) ? response : (response?.content ?? []);
         
-        // Only cache successful responses
-        if (roomsList.length > 0) {
-          dataCache.set(cacheKey, roomsList);
-        }
+        // Cache all responses (including empty)
+        dataCache.set(cacheKey, roomsList);
         
         setRooms(roomsList);
       } catch (e) {
@@ -232,11 +262,10 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       return;
     }
 
-    // Check cache first
+    // Check cache first - use cached data regardless of length
     const cachedData = dataCache.get<RoomCategoryResponse[]>(cacheKey);
-    if (cachedData && cachedData.length > 0) {
+    if (cachedData) {
       setRoomCategories(cachedData);
-      return;
     }
 
     // Make API request
@@ -245,10 +274,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         const response = await apiService.getRoomCategories();
         const categories = Array.isArray(response) ? response : (response?.content ?? []);
         
-        // Only cache successful responses
-        if (categories.length > 0) {
-          dataCache.set(cacheKey, categories);
-        }
+        // Cache all responses (including empty)
+        dataCache.set(cacheKey, categories);
         
         setRoomCategories(categories);
       } catch (e) {
@@ -279,7 +306,6 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     const cachedData = dataCache.get<ReservationRequestResponse[]>(cacheKey);
     if (cachedData) {
       setReservationRequests(cachedData);
-      return;
     }
 
     // Make API request
@@ -425,12 +451,10 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
 
   // Filter stays - show ACTIVE and RESERVED stays in calendar view
   const filteredStays = useMemo(() => stays.filter(s => {
-    const matchSearch = !searchQuery || s.guestName.toLowerCase().includes(searchQuery.toLowerCase()) || s.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchStatus = filterStatus === 'all' || s.status === filterStatus;
     // Show ACTIVE and RESERVED stays in calendar (exclude CLOSED)
     const isRelevantStay = s.status === 'ACTIVE' || s.status === 'RESERVED';
-    return matchSearch && matchStatus && isRelevantStay;
-  }), [stays, searchQuery, filterStatus]);
+    return isRelevantStay;
+  }), [stays]);
 
   // Filter reservation requests
   const filteredRequests = useMemo(() => reservationRequests.filter(r => r.status === 'PENDING'), [reservationRequests]);
@@ -456,15 +480,31 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
 
   const handleRejectRequest = async () => {
     if (!selectedRequest || !rejectReason.trim()) return;
+    
+    // Check if request is actually in PENDING status before trying to reject
+    if (selectedRequest.status !== 'PENDING') {
+      alert('يمكن رفض الطلبات المعلقة فقط');
+      return;
+    }
+    
+    // Save request data for potential rollback
+    const requestToReject = { ...selectedRequest };
+    const requestId = selectedRequest.id;
+    
+    // Remove the request from UI immediately for better UX
+    setReservationRequests(prev => prev.filter(r => r.id !== requestId));
+    setIsRejectModalOpen(false);
+    setSelectedRequest(null);
+    setRejectReason('');
+    
     try {
-      await apiService.rejectReservationRequest(selectedRequest.id, { reason: rejectReason });
-      setIsRejectModalOpen(false);
-      setSelectedRequest(null);
-      setRejectReason('');
-      // Reload to remove the rejected request from the list
+      await apiService.rejectReservationRequest(requestId, { reason: rejectReason });
+      // Reload to ensure data consistency
       loadReservationRequests();
     } catch (e: any) {
       console.error('Failed to reject request:', e);
+      // Add the request back to the list if the API call failed
+      setReservationRequests(prev => [...prev, requestToReject]);
       alert('فشل رفض الطلب');
     }
   };
@@ -491,73 +531,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     setIsRejectModalOpen(true);
   };
 
-  // Calendar helpers
-  const getDaysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  const getFirstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
 
-  const monthDays = useMemo(() => {
-    const daysInMonth = getDaysInMonth(currentDate);
-    const firstDay = getFirstDayOfMonth(currentDate);
-    const days: (number | null)[] = [];
-    for (let i = 0; i < firstDay; i++) days.push(null);
-    for (let i = 1; i <= daysInMonth; i++) days.push(i);
-    return days;
-  }, [currentDate]);
-
-  const weekDays = useMemo(() => {
-    const startOfWeek = new Date(currentDate);
-    startOfWeek.setDate(currentDate.getDate() - currentDate.getDay());
-    const days: Date[] = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(startOfWeek);
-      d.setDate(startOfWeek.getDate() + i);
-      days.push(d);
-    }
-    return days;
-  }, [currentDate]);
-
-  const getStaysForDate = (date: Date) => {
-    return filteredStays.filter(s => {
-      // Use expectedCheckInDate if checkInTime is null (for future reservations)
-      const checkInDate = s.checkInTime ? new Date(s.checkInTime) : new Date(s.expectedCheckInDate);
-      const checkOutDate = new Date(s.expectedCheckOutDate);
-
-      if (!checkInDate || !checkOutDate) return false;
-
-      // Reset time to midnight for accurate date comparison
-      const targetDate = new Date(date);
-      targetDate.setHours(0, 0, 0, 0);
-
-      const checkInMidnight = new Date(checkInDate);
-      checkInMidnight.setHours(0, 0, 0, 0);
-
-      const checkOutMidnight = new Date(checkOutDate);
-      checkOutMidnight.setHours(0, 0, 0, 0);
-
-      const isInRange = targetDate >= checkInMidnight && targetDate <= checkOutMidnight;
-
-      return isInRange;
-    });
-  };
-
-  const navigate = (direction: number) => {
-    const newDate = new Date(currentDate);
-    if (viewMode === 'month') newDate.setMonth(newDate.getMonth() + direction);
-    else if (viewMode === 'week') newDate.setDate(newDate.getDate() + (direction * 7));
-    else newDate.setDate(newDate.getDate() + direction);
-    setCurrentDate(newDate);
-  };
-
-  const goToToday = () => setCurrentDate(new Date());
-
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-  };
-
-  const isSameDay = (date1: Date, date2: Date) => {
-    return date1.getDate() === date2.getDate() && date1.getMonth() === date2.getMonth() && date1.getFullYear() === date2.getFullYear();
-  };
 
   const getStatusColor = (status: string) => STATUS_COLORS[status] || { bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-200', dot: 'bg-gray-400' };
   const getStatusLabel = (status: string) => STATUS_LABELS[status] || '—';
@@ -594,8 +568,48 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     const filteredRooms = rooms.filter((room) => {
       const categoryName = room.categoryName || 'غير مصنف';
       const matchesCategory = selectedCategory === 'all' || categoryName === selectedCategory;
-      const matchesSearch = !normalizedQuery || room.roomNumber.toLowerCase().includes(normalizedQuery) || categoryName.toLowerCase().includes(normalizedQuery);
-      return matchesCategory && matchesSearch;
+      
+      // If no search query, apply category filter
+      if (!normalizedQuery) {
+        return matchesCategory;
+      }
+      
+      // When searching, ignore category filter to show all matching rooms
+      // Search in room fields
+      const roomSearchableFields = [
+        room.roomNumber,
+        categoryName,
+        room.description,
+        room.floor?.toString(),
+        room.status,
+        room.viewType,
+        room.bedType
+      ];
+      
+      const matchesRoomSearch = roomSearchableFields.some(field => 
+        field && field.toLowerCase().includes(normalizedQuery)
+      );
+      
+      // Also search in stays associated with this room
+      const staysForRoom = stays.filter(s => s.roomId === room.id);
+      const matchesStaySearch = staysForRoom.some(stay => {
+        const staySearchableFields = [
+          stay.guestName,
+          stay.guestPhone,
+          stay.email,
+          stay.nationality,
+          stay.identification,
+          stay.status,
+          stay.notes,
+          stay.expectedCheckInDate,
+          stay.expectedCheckOutDate
+        ];
+        return staySearchableFields.some(field => 
+          field && field.toLowerCase().includes(normalizedQuery)
+        );
+      });
+      
+      return matchesRoomSearch || matchesStaySearch;
     });
 
     filteredRooms.sort((a, b) => Number(a.roomNumber) - Number(b.roomNumber) || a.roomNumber.localeCompare(b.roomNumber));
@@ -614,7 +628,14 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       if (rightIndex === -1) return -1;
       return leftIndex - rightIndex;
     });
-  }, [rooms, roomCategories, searchQuery, selectedCategory]);
+  }, [rooms, roomCategories, searchQuery, selectedCategory, stays]);
+
+  // Auto-expand all calendar categories when roomGroups changes
+  useEffect(() => {
+    if (roomGroups.length > 0) {
+      setExpandedCalendarCategories(new Set(roomGroups.map(([name]) => name)));
+    }
+  }, [roomGroups]);
 
   const getCalendarBlock = (stay: StayDetailsResponse) => {
     const checkInDate = new Date(stay.checkInTime || stay.expectedCheckInDate);
@@ -657,7 +678,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
               <span>طلبات معلقة ({filteredRequests.length})</span>
             </button>
           )}
-          <button onClick={() => { loadAvailableRooms(); setIsCreateModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-[#AA7B30] to-[#D4AF37] text-white font-bold text-sm rounded-xl shadow-lg hover:shadow-xl transition">
+          <button onClick={() => { loadAvailableRooms(); setIsCreateModalOpen(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-[#D4AF37] text-white font-bold text-sm rounded-xl shadow-lg hover:shadow-xl transition">
             <Plus size={18} /><span>حجز جديد</span>
           </button>
         </div>
@@ -706,9 +727,11 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                       <button onClick={() => openApproveModal(request)} className="px-4 py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm font-bold hover:bg-green-100 transition flex items-center gap-2">
                         <Check size={16} />موافقة
                       </button>
-                      <button onClick={() => openRejectModal(request)} className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition flex items-center gap-2">
-                        <XCircle size={16} />رفض
-                      </button>
+                      {request.status === 'PENDING' && (
+                        <button onClick={() => openRejectModal(request)} className="px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition flex items-center gap-2">
+                          <XCircle size={16} />رفض
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -718,22 +741,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         </div>
       )}
 
-      {/* Calendar Controls */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        {/* Navigation - Hide in pricing and table view */}
-        {calendarView !== 'pricing' && displayMode !== 'table' && (
-          <div className="flex items-center gap-3">
-            <button onClick={() => navigate(-1)} className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"><ChevronRight size={18} className="text-gray-600" /></button>
-            <button onClick={goToToday} className="px-4 py-2 border border-[#D4AF37] text-[#AA7B37] bg-white rounded-xl text-sm font-bold hover:bg-amber-50 transition">اليوم</button>
-            <button onClick={() => navigate(1)} className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"><ChevronLeft size={18} className="text-gray-600" /></button>
-            <h2 className="text-lg font-black text-gray-900 mr-2">
-              {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
-            </h2>
-          </div>
-        )}
-
-        {/* Right side controls */}
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Right side controls */}
+      <div className="flex flex-wrap items-center justify-between w-full gap-3">
           {/* Display Mode Toggle - Hide in pricing view */}
           {calendarView !== 'pricing' && (
             <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
@@ -746,48 +755,19 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
             </div>
           )}
 
-          {/* Calendar View Mode - Hide in table view */}
-          {displayMode === 'calendar' && (
-            <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
-              {(['month', 'week', 'day'] as ViewMode[]).map(v => (
-                <button key={v} onClick={() => setViewMode(v)} className={`px-4 py-2 text-sm font-bold transition ${viewMode === v ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
-                  {v === 'month' ? 'شهر' : v === 'week' ? 'أسبوع' : 'يوم'}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Calendar Type Toggle - Always show on left side */}
           {displayMode === 'calendar' && (
-            <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
-              <button onClick={() => setCalendarView('traditional')} className={`px-4 py-2 text-sm font-bold transition ${calendarView === 'traditional' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+            <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden w-full justify-between">
+              <button onClick={() => setCalendarView('traditional')} className={`flex-1 px-4 py-2 text-sm font-bold transition ${calendarView === 'traditional' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
                 تقليدي
               </button>
             
-              <button onClick={() => setCalendarView('pricing')} className={`px-4 py-2 text-sm font-bold transition ${calendarView === 'pricing' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
+              <button onClick={() => setCalendarView('pricing')} className={`flex-1 px-4 py-2 text-sm font-bold transition ${calendarView === 'pricing' ? 'bg-[#D4AF37] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
                 الأسعار
               </button>
             </div>
           )}
 
-          {/* Search and Filter - Hide in pricing and table view */}
-          {calendarView !== 'pricing' && displayMode === 'calendar' && (
-            <>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input type="text" placeholder="بحث..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="bg-white border border-gray-200 focus:border-[#D4AF37] rounded-xl pr-10 pl-4 py-2 text-sm text-gray-800 placeholder-gray-400 focus:outline-none w-40 transition" />
-              </div>
-              <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="bg-white border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-600 focus:outline-none focus:border-[#D4AF37]">
-                <option value="all">الكل</option>
-                <option value="RESERVED">محجوز</option>
-                <option value="ACTIVE">نشط</option>
-                <option value="CLOSED">مغلق</option>
-                <option value="CANCELLED">ملغي</option>
-                <option value="NO_SHOW">لم يحضر</option>
-              </select>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Loading / Error */}
@@ -876,28 +856,17 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
           {displayMode === 'calendar' && calendarView === 'traditional' && (
             <div className="overflow-hidden rounded-[26px] border border-[#e8e1d0] bg-white shadow-[0_12px_40px_rgba(17,24,39,0.03)]">
               {/* Calendar Header Controls */}
-              <div className="flex items-center justify-between gap-3 border-b border-[#f0ebdf] bg-[#fcfaf7] px-4 py-3 md:px-5">
-                <div className="flex items-center gap-2">
-                  <button onClick={() => goToToday()} className="rounded-lg border border-[#d9c279] bg-[#fffaf0] px-3 py-2 text-xs font-bold text-[#7c6121] transition hover:bg-[#fdf1cf]">
-                    اليوم
-                  </button>
-                </div>
-
-                <div className="text-sm font-black text-[#1f2937] md:text-base">
-                  {todayIndex >= 0 ? `من ${yearCalendarDays[0].toLocaleDateString('ar-SA')} إلى ${yearCalendarDays[yearCalendarDays.length - 1].toLocaleDateString('ar-SA')}` : 'تقويم السنة'}
-                </div>
-
+              <div className="flex items-center justify-end gap-3 border-b border-[#f0ebdf] bg-[#fcfaf7] px-4 py-3 md:px-5">
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="بحث"
-                      className="w-36 rounded-xl border border-[#ece7dc] bg-white py-2 pr-9 pl-3 text-sm text-gray-700 outline-none transition focus:border-[#d4af37] md:w-44"
+                      placeholder="بحث..."
+                      className="w-36 rounded-xl border border-[#ece7dc] bg-white py-2 pr-9 pl-3 text-sm text-gray-700 outline-none transition focus:border-[#d4af37] md:w-48"
                     />
                   </div>
-
                   <select
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
@@ -916,108 +885,147 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                 ref={calendarScrollRef}
                 onWheel={handleWheel}
                 onScroll={handleCalendarScroll}
-                className="overflow-x-auto smooth-scroll"
+                className="overflow-hidden smooth-scroll"
                 style={{ scrollBehavior: 'smooth' }}
               >
-                <div className="min-w-min">
-                  {/* Header Row with Dates */}
-                  <div className="grid sticky top-0 z-20 bg-white" style={{ gridTemplateColumns: '220px minmax(0, 1fr)' }}>
-                    <div className="sticky left-0 z-20 border-r border-[#f0ebdf] bg-[#faf8f2] px-3 py-3 text-xs font-bold text-[#6b7280]">
+                <div className="flex min-h-full">
+                  {/* Fixed Room Column */}
+                  <div className="flex-shrink-0 w-[220px] border-r border-[#f0ebdf] bg-[#faf8f2]">
+                    {/* Header */}
+                    <div className="sticky top-0 z-20 border-b border-[#f0ebdf] bg-[#faf8f2] px-3 py-3 text-xs font-bold text-[#6b7280]">
                       الغرف
                     </div>
-                    <div className="grid bg-[#faf8f2]" style={{ gridTemplateColumns: `repeat(${yearCalendarDays.length}, minmax(60px, 1fr))` }}>
-                      {yearCalendarDays.map((day, idx) => {
-                        const isCurrent = day.toDateString() === new Date().toDateString();
-                        return (
-                          <div key={day.toISOString()} className={`border-r border-[#f0ebdf] px-2 py-3 text-center ${isCurrent ? 'bg-[#fff9eb]' : 'bg-[#faf8f2]'}`}>
-                            <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#7a7a7a]">{DAY_NAMES[day.getDay()]}</div>
-                            <div className={`mt-1 text-sm font-black ${isCurrent ? 'text-[#9a7323]' : 'text-[#1f2937]'}`}>{day.getDate()}</div>
-                            <div className="text-[8px] text-gray-400">{MONTH_NAMES[day.getMonth()]}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    
+                    {/* Category Headers */}
+                    {roomGroups.map(([categoryName, categoryRooms]) => (
+                      <div key={categoryName}>
+                        <button
+                          onClick={() => {
+                            setExpandedCalendarCategories(prev => {
+                              const newSet = new Set(prev);
+                              if (newSet.has(categoryName)) {
+                                newSet.delete(categoryName);
+                              } else {
+                                newSet.add(categoryName);
+                              }
+                              return newSet;
+                            });
+                          }}
+                          className="w-full border-b border-[#f0ebdf] bg-[#faf8f2] px-3 py-2 text-sm font-bold text-[#8a6c20] hover:bg-[#f5f1ea] transition flex items-center justify-between"
+                        >
+                          <span>{categoryName}</span>
+                          <span className="text-gray-400">{expandedCalendarCategories.has(categoryName) ? '−' : '+'}</span>
+                        </button>
+                        
+                        {/* Room Labels for this category */}
+                        {expandedCalendarCategories.has(categoryName) && categoryRooms.map((room) => {
+                          const roomStatus = roomStatusTranslations[room.status] || 'متاحة';
+                          const roomBadge = room.status === 'AVAILABLE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : room.status === 'OCCUPIED' ? 'bg-red-50 text-red-700 border-red-200' : room.status === 'CLEANING' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200';
+                          
+                          return (
+                            <div key={room.id} className="border-b border-[#f0ebdf] bg-white px-3 py-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <div className="text-sm font-black text-[#1f2937]">{room.roomNumber}</div>
+                                  <div className="text-[11px] text-gray-500">{room.categoryName || 'غير مصنف'}</div>
+                                </div>
+                                <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-bold whitespace-nowrap ${roomBadge}`}>
+                                  {roomStatus}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Empty State */}
-                  {roomGroups.length === 0 && (
-                    <div className="border-t border-[#f0ebdf] bg-white px-6 py-12 text-center text-sm font-bold text-gray-400">
-                      لا توجد غرف متاحة في قاعدة البيانات
-                    </div>
-                  )}
-
-                  {/* Room Groups */}
-                  {roomGroups.map(([categoryName, categoryRooms]) => (
-                    <div key={categoryName} className="border-t border-[#f0ebdf]">
-                      {/* Category Header */}
-                      <div className="grid" style={{ gridTemplateColumns: '220px minmax(0, 1fr)' }}>
-                        <div className="border-r border-[#f0ebdf] bg-[#faf8f2] px-3 py-2 text-sm font-bold text-[#8a6c20]">
-                          {categoryName}
+                  {/* Scrollable Content */}
+                  <div 
+                    ref={calendarScrollRef}
+                    className="overflow-x-auto smooth-scroll"
+                    style={{ scrollBehavior: 'smooth' }}
+                  >
+                    <div className="min-w-min">
+                      {/* Header Row with Dates */}
+                      <div className="sticky top-0 z-20 bg-white">
+                        <div className="grid bg-[#faf8f2]" style={{ gridTemplateColumns: `repeat(${yearCalendarDays.length}, minmax(60px, 1fr))` }}>
+                          {yearCalendarDays.map((day, idx) => {
+                            const isCurrent = day.toDateString() === new Date().toDateString();
+                            return (
+                              <div key={day.toISOString()} className={`border-r border-[#f0ebdf] px-2 py-3 text-center ${isCurrent ? 'bg-[#fff9eb]' : 'bg-[#faf8f2]'}`}>
+                                <div className="text-[9px] font-bold uppercase tracking-[0.1em] text-[#7a7a7a]">{DAY_NAMES[day.getDay()]}</div>
+                                <div className={`mt-1 text-sm font-black ${isCurrent ? 'text-[#9a7323]' : 'text-[#1f2937]'}`}>{day.getDate()}</div>
+                                <div className="text-[8px] text-gray-400">{MONTH_NAMES[day.getMonth()]}</div>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <div className="bg-[#faf8f2]" />
                       </div>
 
-                      {/* Room Rows */}
-                      {categoryRooms.map((room) => {
-                        const roomBlocks = getRoomStayBlocks(room);
-                        const roomStatus = roomStatusTranslations[room.status] || 'متاحة';
-                        const roomBadge = room.status === 'AVAILABLE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : room.status === 'OCCUPIED' ? 'bg-red-50 text-red-700 border-red-200' : room.status === 'CLEANING' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-100 text-slate-600 border-slate-200';
+                      {/* Empty State */}
+                      {roomGroups.length === 0 && (
+                        <div className="border-t border-[#f0ebdf] bg-white px-6 py-12 text-center text-sm font-bold text-gray-400">
+                          لا توجد غرف متاحة في قاعدة البيانات
+                        </div>
+                      )}
 
-                        return (
-                          <div key={room.id} className="grid border-t border-[#f0ebdf]" style={{ gridTemplateColumns: '220px minmax(0, 1fr)' }}>
-                            {/* Sticky Room Label */}
-                            <div className="sticky left-0 z-10 flex items-center justify-between gap-2 border-r border-[#f0ebdf] bg-white px-3 py-3">
-                              <div>
-                                <div className="text-sm font-black text-[#1f2937]">{room.roomNumber}</div>
-                                <div className="text-[11px] text-gray-500">{room.categoryName || 'غير مصنف'}</div>
+                      {/* Room Groups */}
+                      {roomGroups.map(([categoryName, categoryRooms]) => (
+                        <div key={categoryName}>
+                          {/* Category Header */}
+                          <div className="border-t border-[#f0ebdf] bg-[#faf8f2] h-[46px]" />
+
+                          {/* Room Rows */}
+                          {expandedCalendarCategories.has(categoryName) && categoryRooms.map((room) => {
+                            const roomBlocks = getRoomStayBlocks(room);
+
+                            return (
+                              <div key={room.id} className="border-t border-[#f0ebdf]">
+                                {/* Reservation Blocks Container */}
+                                <div className="relative border-l border-[#f0ebdf] bg-white">
+                                  <div className="grid" style={{ gridTemplateColumns: `repeat(${yearCalendarDays.length}, minmax(60px, 1fr))`, minHeight: 76 }}>
+                                    {yearCalendarDays.map((day, idx) => (
+                                      <div key={`${room.id}-${day.toISOString()}`} className="border-r border-[#f5f1ea] bg-white" />
+                                    ))}
+                                  </div>
+
+                                  {/* Reservation Blocks */}
+                                  {roomBlocks.map((block) => {
+                                    const statusColor = getStatusColor(block.status);
+                                    const left = `${(block.start / yearCalendarDays.length) * 100}%`;
+                                    const width = `${Math.max((block.width / yearCalendarDays.length) * 100, 8)}%`;
+
+                                    return (
+                                      <button
+                                        key={`${room.id}-${block.stay.stayId}`}
+                                        type="button"
+                                        onClick={() => { setSelectedStay(block.stay); setIsModalOpen(true); }}
+                                        className={`absolute top-3 h-10 overflow-hidden rounded-lg border px-2 py-1 text-right shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#D4AF37] ${statusColor.bg} ${statusColor.border}`}
+                                        style={{ left, width, zIndex: 2 }}
+                                        title={`${block.stay.guestName} • ${block.stay.roomNumber}`}
+                                      >
+                                        <div className="truncate text-[9px] font-black text-gray-900">{block.stay.guestName}</div>
+                                        <div className="truncate text-[8px] text-gray-700">{getStatusLabel(block.stay.status)}</div>
+                                      </button>
+                                    );
+                                  })}
+
+                                  {/* Today Indicator Line */}
+                                  {todayIndex >= 0 && todayIndex < yearCalendarDays.length && (
+                                    <div
+                                      className="pointer-events-none absolute inset-y-0 w-[2px] bg-[#d4af37]"
+                                      style={{ left: `${((todayIndex + 0.5) / yearCalendarDays.length) * 100}%`, zIndex: 3 }}
+                                    />
+                                  )}
+                                </div>
                               </div>
-                              <span className={`inline-flex items-center rounded-full border px-2 py-1 text-[10px] font-bold whitespace-nowrap ${roomBadge}`}>
-                                {roomStatus}
-                              </span>
-                            </div>
-
-                            {/* Reservation Blocks Container */}
-                            <div className="relative border-l border-[#f0ebdf] bg-white">
-                              <div className="grid" style={{ gridTemplateColumns: `repeat(${yearCalendarDays.length}, minmax(60px, 1fr))`, minHeight: 76 }}>
-                                {yearCalendarDays.map((day, idx) => (
-                                  <div key={`${room.id}-${day.toISOString()}`} className="border-r border-[#f5f1ea] bg-white" />
-                                ))}
-                              </div>
-
-                              {/* Reservation Blocks */}
-                              {roomBlocks.map((block) => {
-                                const statusColor = getStatusColor(block.status);
-                                const left = `${(block.start / yearCalendarDays.length) * 100}%`;
-                                const width = `${Math.max((block.width / yearCalendarDays.length) * 100, 8)}%`;
-
-                                return (
-                                  <button
-                                    key={`${room.id}-${block.stay.stayId}`}
-                                    type="button"
-                                    onClick={() => { setSelectedStay(block.stay); setIsModalOpen(true); }}
-                                    className={`absolute top-3 h-10 overflow-hidden rounded-lg border px-2 py-1 text-right shadow-sm transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#D4AF37] ${statusColor.bg} ${statusColor.border}`}
-                                    style={{ left, width, zIndex: 2 }}
-                                    title={`${block.stay.guestName} • ${block.stay.roomNumber}`}
-                                  >
-                                    <div className="truncate text-[9px] font-black text-gray-900">{block.stay.guestName}</div>
-                                    <div className="truncate text-[8px] text-gray-700">{getStatusLabel(block.stay.status)}</div>
-                                  </button>
-                                );
-                              })}
-
-                              {/* Today Indicator Line */}
-                              {todayIndex >= 0 && todayIndex < yearCalendarDays.length && (
-                                <div
-                                  className="pointer-events-none absolute inset-y-0 w-[2px] bg-[#d4af37]"
-                                  style={{ left: `${((todayIndex + 0.5) / yearCalendarDays.length) * 100}%`, zIndex: 3 }}
-                                />
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                            );
+                          })}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
               </div>
             </div>

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronLeft, ChevronRight, Calendar, Loader2, AlertCircle, DollarSign, RefreshCw, X, Save, Bed } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Loader2, AlertCircle, RefreshCw, X, Save, Bed } from 'lucide-react';
 import { apiService, RoomCategoryResponse, DailyRateResponse, RoomResponse, StayDetailsResponse } from '../../services/api';
 import CalendarSkeleton from './CalendarSkeleton';
+import { dataCache, cacheKeys } from '../../services/dataCache';
 
 const DAY_NAMES = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const MONTH_NAMES = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
@@ -35,7 +36,7 @@ export default function PricingCalendar() {
   const [error, setError] = useState<string | null>(null);
 
   // UI State
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentDate, setCurrentDate] = useState(new Date(2026, 11, 1)); // December 2026
   const [dateRange, setDateRange] = useState(14); // 14 days by default
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [editingRate, setEditingRate] = useState<{ categoryId: number; date: string; currentPrice: number; categoryName: string } | null>(null);
@@ -51,20 +52,115 @@ export default function PricingCalendar() {
   }, [categoryRates]);
 
   // Load data on mount and when date range changes
-  useEffect(() => {
-    loadPricingData();
-  }, [dateRange, currentDate]);
+  const loadCategories = async (forceRefresh = false) => {
+    const cacheKey = cacheKeys.rooms.roomCategories();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
+    }
 
-  const loadPricingData = async () => {
-    setIsLoading(true);
+    // Check cache first - use cached data regardless of age or length
+    const cachedData = dataCache.get<RoomCategoryResponse[]>(cacheKey);
+    if (cachedData && !forceRefresh) {
+      setCategories(cachedData);
+    }
+
+    try {
+      const categoriesData = await apiService.getRoomCategories();
+      const categories = categoriesData.content || categoriesData || [];
+      
+      // Cache all responses (including empty)
+      dataCache.set(cacheKey, categories);
+      
+      setCategories(categories);
+    } catch (e) {
+      console.error('Failed to load categories:', e);
+      // Keep existing cached data if available
+      const existingCache = dataCache.get<RoomCategoryResponse[]>(cacheKey);
+      if (existingCache) {
+        setCategories(existingCache);
+      }
+    }
+  };
+
+  const loadRooms = async (forceRefresh = false) => {
+    const cacheKey = cacheKeys.rooms.rooms('all', 'all');
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
+    }
+
+    // Check cache first - use cached data regardless of age or length
+    const cachedData = dataCache.get<RoomResponse[]>(cacheKey);
+    if (cachedData && !forceRefresh) {
+      setRooms(cachedData);
+    }
+
+    try {
+      const roomsData = await apiService.getRooms(undefined, undefined, 0, 1000);
+      const rooms = roomsData.content || [];
+      
+      // Cache all responses (including empty)
+      dataCache.set(cacheKey, rooms);
+      
+      setRooms(rooms);
+    } catch (e) {
+      console.error('Failed to load rooms:', e);
+      // Keep existing cached data if available
+      const existingCache = dataCache.get<RoomResponse[]>(cacheKey);
+      if (existingCache) {
+        setRooms(existingCache);
+      }
+    }
+  };
+
+  const loadStays = async (forceRefresh = false) => {
+    const cacheKey = cacheKeys.reservations.stays();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
+    }
+
+    // Check cache first - use cached data regardless of age or length
+    const cachedData = dataCache.get<StayDetailsResponse[]>(cacheKey);
+    if (cachedData && !forceRefresh) {
+      setStays(cachedData);
+    }
+
+    try {
+      // Load all stays (no date filter on API side, we'll filter client-side)
+      const staysData = await apiService.getStays(0, 1000);
+      const stays = staysData.content || [];
+      
+      // Cache all responses (including empty)
+      dataCache.set(cacheKey, stays);
+      
+      setStays(stays);
+    } catch (e) {
+      console.error('Failed to load stays:', e);
+      // Keep existing cached data if available
+      const existingCache = dataCache.get<StayDetailsResponse[]>(cacheKey);
+      if (existingCache) {
+        setStays(existingCache);
+      } else {
+        setStays([]);
+      }
+    }
+  };
+
+  const loadPricingData = async (forceRefresh = false) => {
+    setIsLoading(true); // Show loading when manually refreshing
     setError(null);
     try {
       await Promise.all([
-        loadCategories(),
-        loadRooms(),
-        loadStays()
+        loadCategories(forceRefresh),
+        loadRooms(forceRefresh),
+        loadStays(forceRefresh)
       ]);
-      await loadRatesForAllCategories();
+      await loadRatesForAllCategories(forceRefresh);
     } catch (e) {
       setError('فشل تحميل بيانات الأسعار');
     } finally {
@@ -72,36 +168,32 @@ export default function PricingCalendar() {
     }
   };
 
-  const loadCategories = async () => {
-    try {
-      const categoriesData = await apiService.getRoomCategories();
-      setCategories(categoriesData.content || categoriesData || []);
-    } catch (e) {
-      console.error('Failed to load categories:', e);
-    }
-  };
+  // Load data on mount
+  useEffect(() => {
+    // Load cached data immediately first
+    const loadCachedData = () => {
+      const categoriesCache = dataCache.get<RoomCategoryResponse[]>(cacheKeys.rooms.roomCategories());
+      const roomsCache = dataCache.get<RoomResponse[]>(cacheKeys.rooms.rooms('all', 'all'));
+      const staysCache = dataCache.get<StayDetailsResponse[]>(cacheKeys.reservations.stays());
 
-  const loadRooms = async () => {
-    try {
-      const roomsData = await apiService.getRooms(undefined, undefined, 0, 1000);
-      setRooms(roomsData.content || []);
-    } catch (e) {
-      console.error('Failed to load rooms:', e);
-    }
-  };
+      if (categoriesCache) setCategories(categoriesCache);
+      if (roomsCache) setRooms(roomsCache);
+      if (staysCache) setStays(staysCache);
+    };
 
-  const loadStays = async () => {
-    try {
-      // Load all stays (no date filter on API side, we'll filter client-side)
-      const staysData = await apiService.getStays(0, 1000);
-      setStays(staysData.content || []);
-    } catch (e) {
-      console.error('Failed to load stays:', e);
-      setStays([]);
-    }
-  };
+    loadCachedData();
 
-  const loadRatesForAllCategories = useCallback(async () => {
+    // Then load fresh data in background
+    loadPricingData();
+  }, []);
+
+  // Reload when date range or current date changes
+  useEffect(() => {
+    loadPricingData();
+  }, [dateRange, currentDate]);
+
+
+  const loadRatesForAllCategories = useCallback(async (forceRefresh = false) => {
     try {
       const startDate = new Date(currentDate);
       startDate.setDate(startDate.getDate() - Math.floor(dateRange / 2));
@@ -116,12 +208,51 @@ export default function PricingCalendar() {
       categories.forEach(cat => newExpanded.add(cat.id));
       setExpandedCategories(newExpanded);
 
-      const ratesPromises = categories.map(category =>
-        apiService.getRates(category.id, from, to).catch(err => {
-          console.error(`Failed to load rates for category ${category.id}:`, err);
-          return []; // Return empty array on error
-        })
-      );
+      const ratesPromises = categories.map(category => {
+        const cacheKey = `pricing:rates:${category.id}:${from}:${to}`;
+        
+        // Check if request is already pending
+        if (dataCache.isPending(cacheKey)) {
+          return dataCache.getPending(cacheKey) || Promise.resolve([]);
+        }
+
+        // Check cache first - use cached data regardless of age
+        const cachedData = dataCache.get<DailyRateResponse[]>(cacheKey);
+        if (cachedData && !forceRefresh) {
+          // Use cached data but still make API request in background to update
+          const requestPromise = apiService.getRates(category.id, from, to)
+            .then(rates => {
+              // Cache all responses (including empty)
+              dataCache.set(cacheKey, rates);
+              return rates;
+            })
+            .catch(err => {
+              console.error(`Failed to load rates for category ${category.id}:`, err);
+              // Keep existing cached data
+              return cachedData;
+            });
+
+          dataCache.setPending(cacheKey, requestPromise);
+          return Promise.resolve(cachedData); // Return cached data immediately
+        }
+
+        // Make API request
+        const requestPromise = apiService.getRates(category.id, from, to)
+          .then(rates => {
+            // Cache all responses (including empty)
+            dataCache.set(cacheKey, rates);
+            return rates;
+          })
+          .catch(err => {
+            console.error(`Failed to load rates for category ${category.id}:`, err);
+            // Keep existing cached data if available
+            const existingCache = dataCache.get<DailyRateResponse[]>(cacheKey);
+            return existingCache || [];
+          });
+
+        dataCache.setPending(cacheKey, requestPromise);
+        return requestPromise;
+      });
 
       const ratesResults = await Promise.allSettled(ratesPromises);
       
@@ -136,7 +267,7 @@ export default function PricingCalendar() {
 
       const categoryRatesData: CategoryRates[] = categories.map((category, index) => ({
         category,
-        rates: ratesResults[index].status === 'fulfilled' ? ratesResults[index].value : [],
+        rates: ratesResults[index].status === 'fulfilled' ? (ratesResults[index].value as DailyRateResponse[]) : [],
         rooms: roomsByCategory.get(category.id) || []
       }));
 
@@ -161,10 +292,10 @@ export default function PricingCalendar() {
     return dates;
   }, [currentDate, dateRange]);
 
-  // Navigate dates
+  // Navigate dates by month
   const navigateDate = useCallback((direction: number) => {
     const newDate = new Date(currentDate);
-    newDate.setDate(newDate.getDate() + direction);
+    newDate.setMonth(newDate.getMonth() + direction);
     setCurrentDate(newDate);
   }, [currentDate]);
 
@@ -298,7 +429,7 @@ export default function PricingCalendar() {
         <AlertCircle size={48} className="text-red-400 mx-auto mb-4" />
         <p className="text-gray-500 text-sm font-bold mb-4">{error}</p>
         <button 
-          onClick={loadPricingData}
+          onClick={() => loadPricingData(true)}
           className="px-5 py-2 bg-[#D4AF37] text-white font-bold text-sm rounded-xl hover:bg-[#AA7B30] transition"
         >
           إعادة المحاولة
@@ -311,40 +442,15 @@ export default function PricingCalendar() {
     <div className="space-y-6">
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-gray-200 pb-5">
-        {/* Navigation */}
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigateDate(-1)}
-            className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"
-          >
-            <ChevronRight size={18} className="text-gray-600" />
-          </button>
-          <button 
-            onClick={goToToday}
-            className="px-4 py-2 border border-[#D4AF37] text-[#AA7B37] bg-white rounded-xl text-sm font-bold hover:bg-amber-50 transition"
-          >
-            اليوم
-          </button>
-          <button 
-            onClick={() => navigateDate(1)}
-            className="p-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"
-          >
-            <ChevronLeft size={18} className="text-gray-600" />
-          </button>
-          <h2 className="text-lg font-black text-gray-900 mr-2">
-            {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
-          </h2>
-        </div>
-
         {/* Controls */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 w-full">
           {/* Date Range Selector */}
-          <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden">
-            {[7, 14, 30, 60].map(range => (
+          <div className="flex border border-gray-200 rounded-xl bg-white overflow-hidden flex-1">
+            {[14, 30, 60].map(range => (
               <button
                 key={range}
                 onClick={() => setDateRange(range)}
-                className={`px-3 py-2 text-sm font-bold transition border-l first:border-l-0 ${
+                className={`flex-1 px-3 py-2 text-sm font-bold transition border-l first:border-l-0 ${
                   dateRange === range 
                     ? 'bg-[#D4AF37] text-white' 
                     : 'text-gray-600 hover:bg-gray-50'
@@ -356,7 +462,7 @@ export default function PricingCalendar() {
           </div>
 
           <button 
-            onClick={loadPricingData}
+            onClick={() => loadPricingData(true)}
             className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl bg-white hover:bg-gray-50 transition"
           >
             <RefreshCw size={16} className="text-gray-600" />
@@ -390,7 +496,6 @@ export default function PricingCalendar() {
                 }}
               >
                 <div className="flex items-center gap-2">
-                  <DollarSign size={18} className="text-[#AA7B30]" />
                   <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
                   <span className="text-sm text-gray-500">({totalRooms} غرفة)</span>
                 </div>
@@ -513,7 +618,6 @@ export default function PricingCalendar() {
                                     
                                     
                                     <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center transition">
-                                      <div className="text-xs font-bold text-[#AA7B30]">تعديل</div>
                                     </div>
                                   </div>
                                 ) : (
@@ -571,14 +675,6 @@ export default function PricingCalendar() {
 
               <div className="space-y-4">
                 <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      التصنيف
-                    </label>
-                    <div className="text-sm text-gray-900 font-bold">
-                      {editingRate.categoryName}
-                    </div>
-                  </div>
                   <div className="flex-1">
                     <label className="block text-sm font-bold text-gray-700 mb-2">
                       التاريخ
