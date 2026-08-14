@@ -38,10 +38,17 @@ export default function PricingCalendar() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [dateRange, setDateRange] = useState(14); // 14 days by default
   const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
-  const [editingRate, setEditingRate] = useState<{ categoryId: number; date: string; currentPrice: number } | null>(null);
+  const [editingRate, setEditingRate] = useState<{ categoryId: number; date: string; currentPrice: number; categoryName: string } | null>(null);
   const [newPrice, setNewPrice] = useState<string>('');
   const [isSaving, setIsSaving] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+
+  // Initialize expanded categories with all categories (default to expanded)
+  useEffect(() => {
+    if (categoryRates.length > 0) {
+      setExpandedCategories(new Set(categoryRates.map(c => c.category.id)));
+    }
+  }, [categoryRates]);
 
   // Load data on mount and when date range changes
   useEffect(() => {
@@ -193,10 +200,12 @@ export default function PricingCalendar() {
   // Handle rate edit
   const handleRateClick = useCallback((categoryId: number, date: Date, rate: DailyRateResponse | null) => {
     const dateStr = date.toISOString().split('T')[0];
+    const category = categoryRates.find(c => c.category.id === categoryId);
     setEditingRate({
       categoryId,
       date: dateStr,
-      currentPrice: rate?.price || 0
+      currentPrice: rate?.price || 0,
+      categoryName: category?.category.name || 'غير معروف'
     });
     setNewPrice(rate?.price?.toString() || '');
     setIsEditModalOpen(true);
@@ -361,127 +370,166 @@ export default function PricingCalendar() {
         {categoryRates.map(({ category, rates, rooms: categoryRooms }) => {
           const dailyOccupancy = calculateDailyOccupancy(category.id, dateRangeDates);
           const totalRooms = categoryRooms.length;
+          const isExpanded = expandedCategories.has(category.id);
 
           return (
             <div key={category.id} className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
               {/* Category Header */}
-              <div className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+              <div 
+                className="p-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100 transition"
+                onClick={() => {
+                  setExpandedCategories(prev => {
+                    const newSet = new Set(prev);
+                    if (newSet.has(category.id)) {
+                      newSet.delete(category.id);
+                    } else {
+                      newSet.add(category.id);
+                    }
+                    return newSet;
+                  });
+                }}
+              >
                 <div className="flex items-center gap-2">
                   <DollarSign size={18} className="text-[#AA7B30]" />
                   <h3 className="text-lg font-bold text-gray-900">{category.name}</h3>
                   <span className="text-sm text-gray-500">({totalRooms} غرفة)</span>
                 </div>
-              </div>
-
-              {/* Calendar Body */}
-              <div className="relative overflow-x-auto">
-                {/* 4-Row Grid: Day, Available, Occupied, Price */}
-                <div className="min-w-max space-y-0">
-                  {/* Row 1: Days */}
-                  <div className="flex border-b border-gray-200">
-                    {dateRangeDates.map((date, dateIndex) => (
-                      <div
-                        key={`day-${dateIndex}`}
-                        className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-3 text-center ${
-                          isToday(date) ? 'bg-amber-50' : ''
-                        }`}
-                      >
-                        <div className="text-xs font-bold text-gray-500">
-                          {DAY_NAMES[date.getDay()]}
-                        </div>
-                        <div className={`text-xl font-black mt-1 ${
-                          isToday(date) ? 'text-[#AA7B30]' : 'text-gray-800'
-                        }`}>
-                          {date.getDate()}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Row 2: Available Rooms */}
-                  <div className="flex border-b border-gray-200">
-                    {dateRangeDates.map((date, dateIndex) => {
-                      const occupancy = dailyOccupancy[dateIndex];
-                      return (
-                        <div
-                          key={`available-${dateIndex}`}
-                          className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-3 text-center ${
-                            isToday(date) ? 'bg-amber-50/30' : ''
-                          }`}
-                        >
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-xs text-gray-500">غرف متاحة:</span>
-                            <span className={`text-base font-bold px-2 py-0.5 rounded ${
-                              occupancy.available > 0 
-                                ? 'bg-green-100 text-green-700' 
-                                : 'bg-red-100 text-red-700'
-                            }`}>
-                              {occupancy.available}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Row 3: Occupied Rooms */}
-                  <div className="flex border-b border-gray-200">
-                    {dateRangeDates.map((date, dateIndex) => {
-                      const occupancy = dailyOccupancy[dateIndex];
-                      return (
-                        <div
-                          key={`occupied-${dateIndex}`}
-                          className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-3 text-center ${
-                            isToday(date) ? 'bg-amber-50/30' : ''
-                          }`}
-                        >
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-xs text-gray-500">غرف محجوزة:</span>
-                            <span className="text-base font-bold text-gray-800">
-                              {occupancy.occupied}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Row 4: Price */}
-                  <div className="flex">
-                    {dateRangeDates.map((date, dateIndex) => {
-                      const rate = getRateForDate(rates, date);
-                      const isLast = dateIndex === dateRangeDates.length - 1;
-                      return (
-                        <div
-                          key={`price-${dateIndex}`}
-                          onClick={() => handleRateClick(category.id, date, rate)}
-                          className={`flex-shrink-0 w-48 ${isLast ? '' : 'border-r-2 border-gray-200'} p-3 text-center cursor-pointer hover:bg-gray-50 transition group relative ${
-                            isToday(date) ? 'bg-amber-50/30' : ''
-                          }`}
-                        >
-                          {rate ? (
-                            <div className="text-center group relative w-full">
-                              <div className="text-base font-bold text-[#AA7B30] group-hover:text-[#8B6B20] transition">
-                                {rate.price.toLocaleString('ar-SA')} ريال
-                              </div>
-                              
-                              
-                              
-                              <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center transition">
-                                <div className="text-xs font-bold text-[#AA7B30]">تعديل</div>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="text-center text-gray-400 text-base group-hover:text-gray-500 transition">
-                              —
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                <div className="text-gray-400">
+                  {expandedCategories.has(category.id) ? '−' : '+'}
                 </div>
               </div>
+
+              {/* Calendar Body - Only show if expanded */}
+              {expandedCategories.has(category.id) && (
+                <div className="relative overflow-x-auto">
+                  <div className="flex">
+                    {/* Fixed Right Column (RTL - positioned first in DOM) */}
+                    <div className="flex-shrink-0 w-36 bg-gray-50 border-l-2 border-gray-200">
+                      {/* Cell: Day */}
+                      <div className="border-b border-gray-200 p-2 flex items-center justify-center h-[80px]">
+                        <div className="text-xs font-bold text-gray-500">اليوم</div>
+                      </div>
+                      {/* Cell: Available */}
+                      <div className="border-b border-gray-200 p-2 flex items-center justify-center h-[40px]">
+                        <div className="text-xs font-bold text-gray-500">متاحة</div>
+                      </div>
+                      {/* Cell: Occupied */}
+                      <div className="border-b border-gray-200 p-2 flex items-center justify-center h-[44px]">
+                        <div className="text-xs font-bold text-gray-500">محجوزة</div>
+                      </div>
+                      {/* Cell: Price */}
+                      <div className="p-2 flex items-center justify-center h-[32px]">
+                        <div className="text-xs font-bold text-gray-500">السعر</div>
+                      </div>
+                    </div>
+
+                    {/* Scrollable Content */}
+                    <div className="flex-1 overflow-x-auto">
+                      {/* 4-Row Grid: Day, Available, Occupied, Price */}
+                      <div className="min-w-max space-y-0">
+                        {/* Row 1: Days */}
+                        <div className="flex border-b border-gray-200">
+                          {dateRangeDates.map((date, dateIndex) => (
+                            <div
+                              key={`day-${dateIndex}`}
+                              className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-2 text-center ${
+                                isToday(date) ? 'bg-amber-50' : ''
+                              }`}
+                            >
+                              <div className="text-xs font-bold text-gray-500">
+                                {DAY_NAMES[date.getDay()]}
+                              </div>
+                              <div className={`text-xl font-black mt-1 ${
+                                isToday(date) ? 'text-[#AA7B30]' : 'text-gray-800'
+                              }`}>
+                                {date.getDate()}
+                              </div>
+                              <div className="text-[10px] text-gray-400">{MONTH_NAMES[date.getMonth()]}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Row 2: Available Rooms */}
+                        <div className="flex border-b border-gray-200">
+                          {dateRangeDates.map((date, dateIndex) => {
+                            const occupancy = dailyOccupancy[dateIndex];
+                            return (
+                              <div
+                                key={`available-${dateIndex}`}
+                                className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-2 text-center ${
+                                  isToday(date) ? 'bg-amber-50/30' : ''
+                                }`}
+                              >
+                                <span className={`text-base font-bold px-2 py-0.5 rounded ${
+                                  occupancy.available > 0 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {occupancy.available}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Row 3: Occupied Rooms */}
+                        <div className="flex border-b border-gray-200">
+                          {dateRangeDates.map((date, dateIndex) => {
+                            const occupancy = dailyOccupancy[dateIndex];
+                            return (
+                              <div
+                                key={`occupied-${dateIndex}`}
+                                className={`flex-shrink-0 w-48 border-r-2 border-gray-200 p-2 text-center ${
+                                  isToday(date) ? 'bg-amber-50/30' : ''
+                                }`}
+                              >
+                                <span className="text-base font-bold text-gray-800">
+                                  {occupancy.occupied}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Row 4: Price */}
+                        <div className="flex">
+                          {dateRangeDates.map((date, dateIndex) => {
+                            const rate = getRateForDate(rates, date);
+                            const isLast = dateIndex === dateRangeDates.length - 1;
+                            return (
+                              <div
+                                key={`price-${dateIndex}`}
+                                onClick={() => handleRateClick(category.id, date, rate)}
+                                className={`flex-shrink-0 w-48 ${isLast ? '' : 'border-r-2 border-gray-200'} p-2 text-center cursor-pointer hover:bg-gray-50 transition group relative ${
+                                  isToday(date) ? 'bg-amber-50/30' : ''
+                                }`}
+                              >
+                                {rate ? (
+                                  <div className="text-center group relative w-full">
+                                    <div className="text-base font-bold text-[#AA7B30] group-hover:text-[#8B6B20] transition">
+                                      {rate.price.toLocaleString('ar-SA')} ريال
+                                    </div>
+                                    
+                                    
+                                    
+                                    <div className="opacity-0 group-hover:opacity-100 absolute inset-0 bg-[#D4AF37]/10 flex items-center justify-center transition">
+                                      <div className="text-xs font-bold text-[#AA7B30]">تعديل</div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center text-gray-400 text-base group-hover:text-gray-500 transition">
+                                    —
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -508,7 +556,7 @@ export default function PricingCalendar() {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6"
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
@@ -522,17 +570,27 @@ export default function PricingCalendar() {
               </div>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">
-                    التاريخ
-                  </label>
-                  <div className="text-sm text-gray-600">
-                    {new Date(editingRate.date).toLocaleDateString('ar-SA', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric'
-                    })}
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      التصنيف
+                    </label>
+                    <div className="text-sm text-gray-900 font-bold">
+                      {editingRate.categoryName}
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      التاريخ
+                    </label>
+                    <div className="text-sm text-gray-600">
+                      {new Date(editingRate.date).toLocaleDateString('ar-SA', {
+                        weekday: 'long',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      })}
+                    </div>
                   </div>
                 </div>
 

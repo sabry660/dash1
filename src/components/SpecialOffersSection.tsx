@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { 
   Tag, Plus, X, Edit, Trash2, Save, Loader2, Sparkles, 
@@ -7,6 +7,7 @@ import {
 import { apiService, SpecialOfferResponse } from '../services/api';
 import SpecialOffersModal from './SpecialOffersModal';
 import { compressImage, isValidImageFile, CompressionProgress } from '../utils/imageCompression';
+import { dataCache, cacheKeys } from '../services/dataCache';
 
 export default function SpecialOffersSection() {
   const [offers, setOffers] = useState<SpecialOfferResponse[]>([]);
@@ -21,36 +22,76 @@ export default function SpecialOffersSection() {
   const [isCompressingImage, setIsCompressingImage] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState<CompressionProgress | null>(null);
 
-  useEffect(() => {
-    loadOffers();
-  }, []);
+  const loadOffers = useCallback(async () => {
+    const cacheKey = cacheKeys.specialOffers.offers();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
+    }
 
-  const loadOffers = async () => {
+    // Check cache first - use cached data regardless of age
+    const cachedData = dataCache.get<SpecialOfferResponse[]>(cacheKey);
+    if (cachedData) {
+      setOffers(cachedData);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
-    try {
-      const response = await apiService.getSpecialOffers(0, 50);
-      // Sort offers by ID ascending
-      const sortedOffers = (response.content || []).sort((a, b) => a.id - b.id);
-      setOffers(sortedOffers);
-    } catch (error: any) {
-      if (error.message && error.message.includes('Authentication')) {
-        setError('فشل المصادقة. يرجى تسجيل الدخول مرة أخرى.');
-      } else {
-        setError('فشل الاتصال بالخادم. الرجاء المحاولة مرة أخرى.');
+    
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const response = await apiService.getSpecialOffers(0, 50);
+        // Sort offers by ID ascending
+        const sortedOffers = (response.content || []).sort((a: SpecialOfferResponse, b: SpecialOfferResponse) => a.id - b.id);
+        
+        // Only cache successful HTTP 200 responses
+        dataCache.set(cacheKey, sortedOffers);
+        
+        setOffers(sortedOffers);
+      } catch (error: any) {
+        // Keep existing cached data if available (don't overwrite with error)
+        const existingCache = dataCache.get<SpecialOfferResponse[]>(cacheKey);
+        if (existingCache) {
+          setOffers(existingCache);
+        } else {
+          if (error.message && error.message.includes('Authentication')) {
+            setError('فشل المصادقة. يرجى تسجيل الدخول مرة أخرى.');
+          } else {
+            setError('فشل الاتصال بالخادم. الرجاء المحاولة مرة أخرى.');
+          }
+          setOffers([]);
+        }
+      } finally {
+        setIsLoading(false);
       }
-      setOffers([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
+  }, []);
+
+  useEffect(() => {
+    loadOffers();
+  }, [loadOffers]);
+
+  // 15-second polling for special offers
+  useEffect(() => {
+    const pollingInterval = setInterval(() => {
+      loadOffers();
+    }, 15000); // Poll every 15 seconds
+    return () => clearInterval(pollingInterval);
+  }, [loadOffers]);
 
   const handleCreateSuccess = (newOffer?: SpecialOfferResponse) => {
     if (newOffer) {
       // Add new offer and sort by ID ascending
-      setOffers(prevOffers => {
+      setOffers((prevOffers: SpecialOfferResponse[]) => {
         const updatedOffers = [...prevOffers, newOffer];
-        return updatedOffers.sort((a, b) => a.id - b.id);
+        return updatedOffers.sort((a: SpecialOfferResponse, b: SpecialOfferResponse) => a.id - b.id);
       });
     } else {
       loadOffers();

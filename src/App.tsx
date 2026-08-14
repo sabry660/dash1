@@ -6,10 +6,8 @@ import {
 } from 'lucide-react';
 
 import Login from './components/Login';
-import DashboardHome from './components/DashboardHome';
 import RoomsSection from './components/RoomsSection';
 import ReservationsSection from './components/ReservationsSection';
-import GuestsSection from './components/GuestsSection';
 import SpecialOffersSection from './components/SpecialOffersSection';
 import AIAssistantSection from './components/AIAssistantSection';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -57,22 +55,25 @@ function App() {
   }, []);
 
   // Active view tab state with # routing
-  const [activeTab, setActiveTab] = useState<'لوحة التحكم' | 'الحجوزات' | 'الغرف' | 'النزلاء' | 'العروض والمزايا' | 'المساعد الذكي'>(() => {
+  const [activeTab, setActiveTab] = useState<'الحجوزات' | 'الغرف' | 'النزلاء' | 'العروض والمزايا' | 'المساعد الذكي'>(() => {
     const hash = window.location.hash.replace('#', '');
     if (hash) {
       try {
-        return decodeURIComponent(hash) as any;
+        const decoded = decodeURIComponent(hash);
+        // Only return if it's a valid tab
+        if (['الحجوزات', 'الغرف', 'النزلاء', 'العروض والمزايا', 'المساعد الذكي'].includes(decoded)) {
+          return decoded as any;
+        }
       } catch {
-        return 'لوحة التحكم';
+        return 'الحجوزات';
       }
     }
-    return 'لوحة التحكم';
+    return 'الحجوزات';
   });
 
   // Define role-based permissions
   const getAccessibleTabs = (role: string | null) => {
     const allTabs = [
-      { label: 'لوحة التحكم', icon: <Building size={16} />, roles: ['MANAGER', 'STAFF', 'CHEF', 'BARISTA', 'ROOM_SERVICE'] },
       { label: 'الحجوزات', icon: <Calendar size={16} />, roles: ['MANAGER', 'STAFF'] },
       { label: 'الغرف', icon: <BedDouble size={16} />, roles: ['MANAGER', 'STAFF', 'ROOM_SERVICE'] },
       { label: 'المساعد الذكي', icon: <Bot size={16} />, roles: ['MANAGER', 'STAFF', 'CHEF', 'BARISTA', 'ROOM_SERVICE'] },
@@ -107,7 +108,7 @@ function App() {
         try {
           setActiveTab(decodeURIComponent(hash) as any);
         } catch {
-          setActiveTab('لوحة التحكم');
+          setActiveTab('الحجوزات');
         }
       }
     };
@@ -258,23 +259,16 @@ function App() {
   // Render modular views
   const renderActiveView = () => {
     switch (activeTab) {
-      case 'لوحة التحكم':
-        return (
-          <DashboardHome
-            onNavigate={(tab) => handleTabChange(tab as any)}
-            onOpenQuickBook={() => setQuickBookOpen(true)}
-          />
-        );
       case 'الغرف':
         return <RoomsSection />;
       case 'الحجوزات':
         return <ReservationsSection />;
-      case 'النزلاء':
-        return <GuestsSection guests={guests} reservations={reservations} />;
       case 'المساعد الذكي':
         return <AIAssistantSection />;
       case 'العروض والمزايا':
         return <SpecialOffersSection />;
+      default:
+        return <ReservationsSection />;
     }
   };
 

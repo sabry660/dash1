@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { apiService, StayDetailsResponse, CreateStayRequest, ReservationRequestResponse, ApproveReservationRequest, RejectReservationRequest, RoomResponse, RoomCategoryResponse } from '../services/api';
 import PricingCalendar from './calendar/PricingCalendar';
+import { dataCache, cacheKeys } from '../services/dataCache';
 
 type ViewMode = 'month' | 'week' | 'day';
 type CalendarView = 'traditional' | 'horizontal' | 'pricing';
@@ -87,16 +88,17 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     loadData();
   }, []);
 
-  // Retry failed requests automatically
+  // 15-second polling - always updates cache regardless of data state
   useEffect(() => {
-    const retryInterval = setInterval(() => {
-      if (stays.length === 0) loadStays();
-      if (rooms.length === 0) loadRooms();
-      if (roomCategories.length === 0) loadRoomCategories();
-      if (reservationRequests.length === 0) loadReservationRequests();
-    }, 15000); // Retry every 15 seconds (slower to avoid spamming backend)
-    return () => clearInterval(retryInterval);
-  }, [stays.length, rooms.length, roomCategories.length, reservationRequests.length]);
+    const pollingInterval = setInterval(() => {
+      // Always refresh data via polling to update cache
+      loadStays();
+      loadRooms();
+      loadRoomCategories();
+      loadReservationRequests();
+    }, 15000); // Poll every 15 seconds
+    return () => clearInterval(pollingInterval);
+  }, []);
 
   // Year-long calendar spanning from today to end of year
   const yearCalendarDays = useMemo(() => {
@@ -137,49 +139,174 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   }, [yearCalendarDays, todayIndex]);
 
   const loadStays = async () => {
-    try {
-      const response = await apiService.getStays(0, 200);
-      setStays(response.content || []);
-    } catch (e: any) {
-      console.error('Failed to load stays:', e);
-      setStays([]);
-      // Don't set error state - just log and continue
+    const cacheKey = cacheKeys.reservations.stays();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
     }
+
+    // Check cache first
+    const cachedData = dataCache.get<StayDetailsResponse[]>(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      setStays(cachedData);
+      return;
+    }
+
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const response = await apiService.getStays(0, 200);
+        const staysData = response.content || [];
+        
+        // Only cache successful responses
+        if (staysData.length > 0) {
+          dataCache.set(cacheKey, staysData);
+        }
+        
+        setStays(staysData);
+      } catch (e: any) {
+        console.error('Failed to load stays:', e);
+        // Keep existing cached data if available
+        const existingCache = dataCache.get<StayDetailsResponse[]>(cacheKey);
+        if (existingCache) {
+          setStays(existingCache);
+        } else {
+          setStays([]);
+        }
+      }
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
   };
 
   const loadRooms = async () => {
-    try {
-      const response = await apiService.getRooms(undefined, undefined, 0, 200);
-      const roomsList = Array.isArray(response) ? response : (response?.content ?? []);
-      setRooms(roomsList);
-    } catch (e) {
-      console.error('Failed to load rooms:', e);
-      setRooms([]);
+    const cacheKey = cacheKeys.reservations.rooms();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
     }
+
+    // Check cache first
+    const cachedData = dataCache.get<RoomResponse[]>(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      setRooms(cachedData);
+      return;
+    }
+
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const response = await apiService.getRooms(undefined, undefined, 0, 200);
+        const roomsList = Array.isArray(response) ? response : (response?.content ?? []);
+        
+        // Only cache successful responses
+        if (roomsList.length > 0) {
+          dataCache.set(cacheKey, roomsList);
+        }
+        
+        setRooms(roomsList);
+      } catch (e) {
+        console.error('Failed to load rooms:', e);
+        // Keep existing cached data if available
+        const existingCache = dataCache.get<RoomResponse[]>(cacheKey);
+        if (existingCache) {
+          setRooms(existingCache);
+        } else {
+          setRooms([]);
+        }
+      }
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
   };
 
   const loadRoomCategories = async () => {
-    try {
-      const response = await apiService.getRoomCategories();
-      const categories = Array.isArray(response) ? response : (response?.content ?? []);
-      setRoomCategories(categories);
-    } catch (e) {
-      console.error('Failed to load room categories:', e);
-      setRoomCategories([]);
+    const cacheKey = cacheKeys.reservations.roomCategories();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
     }
+
+    // Check cache first
+    const cachedData = dataCache.get<RoomCategoryResponse[]>(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      setRoomCategories(cachedData);
+      return;
+    }
+
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const response = await apiService.getRoomCategories();
+        const categories = Array.isArray(response) ? response : (response?.content ?? []);
+        
+        // Only cache successful responses
+        if (categories.length > 0) {
+          dataCache.set(cacheKey, categories);
+        }
+        
+        setRoomCategories(categories);
+      } catch (e) {
+        console.error('Failed to load room categories:', e);
+        // Keep existing cached data if available
+        const existingCache = dataCache.get<RoomCategoryResponse[]>(cacheKey);
+        if (existingCache) {
+          setRoomCategories(existingCache);
+        } else {
+          setRoomCategories([]);
+        }
+      }
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
   };
 
   const loadReservationRequests = async () => {
-    try {
-      const response = await apiService.getPendingReservationRequests(0, 100);
-      // Handle both paged response and direct array response
-      const requests = response?.content || (Array.isArray(response) ? response : []) as ReservationRequestResponse[];
-      setReservationRequests(requests);
-    } catch (e: any) {
-      console.error('Failed to load reservation requests:', e);
-      setReservationRequests([]);
-      // Don't set error state - just log and continue
+    const cacheKey = cacheKeys.reservations.reservationRequests();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
     }
+
+    // Check cache first
+    const cachedData = dataCache.get<ReservationRequestResponse[]>(cacheKey);
+    if (cachedData) {
+      setReservationRequests(cachedData);
+      return;
+    }
+
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const response = await apiService.getPendingReservationRequests(0, 100);
+        // Handle both paged response and direct array response
+        const requests = response?.content || (Array.isArray(response) ? response : []) as ReservationRequestResponse[];
+        
+        // Cache even empty arrays (this is the correct state)
+        dataCache.set(cacheKey, requests);
+        
+        setReservationRequests(requests);
+      } catch (e: any) {
+        console.error('Failed to load reservation requests:', e);
+        // Keep existing cached data if available
+        const existingCache = dataCache.get<ReservationRequestResponse[]>(cacheKey);
+        if (existingCache !== null) {
+          setReservationRequests(existingCache);
+        } else {
+          setReservationRequests([]);
+        }
+      }
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
   };
 
   const loadAvailableRooms = async () => {
@@ -208,7 +335,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         expectedCheckOutDate: checkOut
       };
 
-      await apiService.createStay(stayData);
+      const createdStay = await apiService.createStay(stayData);
+      console.log('Created stay with status:', createdStay.status);
 
       // Update room status to OCCUPIED after booking
       try {
@@ -240,6 +368,27 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const handleCheckIn = async (stayId: number) => {
     try {
       await apiService.checkInStay(stayId);
+
+      // Update room status to OCCUPIED after checkin
+      const stay = stays.find((s: StayDetailsResponse) => s.stayId === stayId);
+      if (stay && (stay.roomNumber || stay.roomId)) {
+        try {
+          const rooms = await apiService.getRooms(undefined, undefined, 0, 100);
+          const roomToUpdate = (rooms.content || []).find((r: RoomResponse) => (r.roomNumber || r.id.toString()) === (stay.roomNumber || stay.roomId?.toString()));
+          if (roomToUpdate) {
+            await apiService.updateRoom(roomToUpdate.id, {
+              roomNumber: roomToUpdate.roomNumber || roomToUpdate.id.toString(),
+              categoryId: roomToUpdate.categoryId,
+              status: 'OCCUPIED',
+              floor: roomToUpdate.floor,
+              viewType: roomToUpdate.viewType,
+              description: roomToUpdate.description
+            });
+          }
+        } catch (updateError) {
+          console.error('Failed to update room status:', updateError);
+        }
+      }
     } catch { }
     // Always reload to sync with backend state
     loadStays();
@@ -274,11 +423,13 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
     if (onCheckout) onCheckout();
   };
 
-  // Filter stays
+  // Filter stays - show ACTIVE and RESERVED stays in calendar view
   const filteredStays = useMemo(() => stays.filter(s => {
     const matchSearch = !searchQuery || s.guestName.toLowerCase().includes(searchQuery.toLowerCase()) || s.roomNumber?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchStatus = filterStatus === 'all' || s.status === filterStatus;
-    return matchSearch && matchStatus;
+    // Show ACTIVE and RESERVED stays in calendar (exclude CLOSED)
+    const isRelevantStay = s.status === 'ACTIVE' || s.status === 'RESERVED';
+    return matchSearch && matchStatus && isRelevantStay;
   }), [stays, searchQuery, filterStatus]);
 
   // Filter reservation requests
@@ -291,8 +442,12 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       setIsApproveModalOpen(false);
       setSelectedRequest(null);
       setSelectedRoomForApproval(null);
+      // Reload data
       loadReservationRequests();
       loadStays();
+      // Switch to traditional calendar view
+      setDisplayMode('calendar');
+      setCalendarView('traditional');
     } catch (e: any) {
       console.error('Failed to approve request:', e);
       alert('فشل الموافقة على الطلب');
@@ -306,6 +461,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
       setIsRejectModalOpen(false);
       setSelectedRequest(null);
       setRejectReason('');
+      // Reload to remove the rejected request from the list
       loadReservationRequests();
     } catch (e: any) {
       console.error('Failed to reject request:', e);
@@ -481,7 +637,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
 
   const getRoomStayBlocks = (room: RoomResponse) => {
     return stays
-      .filter((stay) => String(stay.roomId) === String(room.id) || stay.roomNumber === room.roomNumber)
+      .filter((stay) => (String(stay.roomId) === String(room.id) || stay.roomNumber === room.roomNumber) && (stay.status === 'ACTIVE' || stay.status === 'RESERVED'))
       .map((stay) => getCalendarBlock(stay))
       .filter((block) => block.visible);
   };
@@ -699,8 +855,8 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                             <div className="flex gap-2">
                               {request.status === 'PENDING' && (
                                 <>
-                                  <button onClick={() => openApproveModal(request)} className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition">قبول</button>
-                                  <button onClick={() => openRejectModal(request)} className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition">رفض</button>
+                                  <button onClick={() => { openApproveModal(request); }} className="px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg text-xs font-bold hover:bg-emerald-100 transition">قبول</button>
+                                  <button onClick={() => { openRejectModal(request); }} className="px-3 py-1.5 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-bold hover:bg-red-100 transition">رفض</button>
                                 </>
                               )}
                             </div>
@@ -953,18 +1109,19 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
                   <h4 className="text-sm font-bold text-gray-700">المبالغ المالية</h4>
                   <div className="grid grid-cols-2 gap-3">
-                    <InfoItem icon={<DollarSign size={16} />} label="رسوم الغرفة" value={selectedStay.roomCharge ? `${selectedStay.roomCharge.toLocaleString('ar-SA')} ريال` : 'غير متاح'} />
-                    <InfoItem icon={<DollarSign size={16} />} label="الإجمالي" value={(() => {
-                      const roomCharge = selectedStay.roomCharge || 0;
+                    <InfoItem icon={<DollarSign size={16} />} label="الإجمالي" value={selectedStay.totalCharge ? `${selectedStay.totalCharge.toLocaleString('ar-SA')} ريال` : 'غير متاح'} highlight />
+                    <InfoItem icon={<DollarSign size={16} />} label="عدد الليالي" value={(() => {
                       const checkIn = selectedStay.checkInTime ? new Date(selectedStay.checkInTime) : (selectedStay.expectedCheckInDate ? new Date(selectedStay.expectedCheckInDate) : null);
                       const checkOut = selectedStay.expectedCheckOutDate ? new Date(selectedStay.expectedCheckOutDate) : null;
-                      if (checkIn && checkOut && roomCharge > 0) {
+                      if (checkIn && checkOut) {
                         const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / 86400000);
-                        const total = roomCharge * nights;
-                        return `${total.toLocaleString('ar-SA')} ريال`;
+                        return `${nights} ليلة`;
                       }
-                      return selectedStay.totalCharge ? `${selectedStay.totalCharge.toLocaleString('ar-SA')} ريال` : 'غير متاح';
-                    })()} highlight />
+                      return 'غير متاح';
+                    })()} />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2 text-center">
+                    * الإجمالي محسوب بناءً على الأسعار اليومية المتغيرة
                   </div>
                 </div>
 
@@ -994,10 +1151,13 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                 {/* Actions */}
                 <div className="flex gap-3 pt-4 border-t border-gray-100">
                   {selectedStay.status === 'RESERVED' && (
-                    <button onClick={() => { handleCheckIn(selectedStay.stayId); setIsModalOpen(false); }} className="flex-1 py-3 bg-blue-50 border border-blue-200 text-blue-700 font-bold text-sm rounded-xl hover:bg-blue-100 transition">تسجيل الدخول</button>
+                    <button onClick={() => { setIsModalOpen(false); handleCheckIn(selectedStay.stayId); }} className="flex-1 py-3 bg-blue-50 border border-blue-200 text-blue-700 font-bold text-sm rounded-xl hover:bg-blue-100 transition">تأكيد الوصول</button>
                   )}
                   {selectedStay.status === 'ACTIVE' && (
-                    <button onClick={() => { handleCheckOut(selectedStay.stayId); setIsModalOpen(false); }} className="flex-1 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm rounded-xl hover:bg-emerald-100 transition">تسجيل المغادرة</button>
+                    <button onClick={() => { setIsModalOpen(false); handleCheckOut(selectedStay.stayId); }} className="flex-1 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm rounded-xl hover:bg-emerald-100 transition">تسجيل المغادرة</button>
+                  )}
+                  {selectedStay.status === 'CLOSED' && (
+                    <div className="flex-1 py-3 bg-gray-100 border border-gray-200 text-gray-500 font-bold text-sm rounded-xl text-center">تم الإنهاء</div>
                   )}
                 </div>
               </div>
@@ -1148,14 +1308,16 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
                     className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[#D4AF37] text-gray-900 bg-white"
                   >
                     <option value="">اختر غرفة متاحة</option>
-                    {availableRoomsForApproval.map((room: RoomResponse) => (
-                      <option key={room.id} value={room.id}>
-                        {room.roomNumber} - {room.categoryName} - {room.description || 'غرفة'}
-                      </option>
-                    ))}
+                    {availableRoomsForApproval
+                      .filter((room: RoomResponse) => selectedRequest && room.categoryId === selectedRequest.categoryId)
+                      .map((room: RoomResponse) => (
+                        <option key={room.id} value={room.id}>
+                          {room.roomNumber} - {room.categoryName} - {room.description || 'غرفة'}
+                        </option>
+                      ))}
                   </select>
-                  {availableRoomsForApproval.length === 0 && (
-                    <p className="text-xs text-red-500 mt-2">لا توجد غرف متاحة حالياً</p>
+                  {availableRoomsForApproval.filter((room: RoomResponse) => selectedRequest && room.categoryId === selectedRequest.categoryId).length === 0 && (
+                    <p className="text-xs text-red-500 mt-2">لا توجد غرف متاحة في فئة {selectedRequest?.categoryName}</p>
                   )}
                 </div>
               </div>

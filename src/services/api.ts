@@ -1215,26 +1215,26 @@ class APIService {
 
   /**
    * Check-in Stay
-   * PUT /api/dashboard/front-desk/stays/{stayId}/checkin
+   * POST /api/dashboard/front-desk/stays/{stayId}/checkin
    */
   async checkInStay(stayId: number): Promise<StayDetailsResponse> {
     return this.authenticatedFetch<StayDetailsResponse>(
       `${this.baseURL}/api/dashboard/front-desk/stays/${stayId}/checkin`,
       {
-        method: 'PUT',
+        method: 'POST',
       }
     );
   }
 
   /**
    * Check-out Stay
-   * PUT /api/dashboard/front-desk/stays/{stayId}/checkout
+   * POST /api/dashboard/front-desk/stays/{stayId}/checkout
    */
   async checkOutStay(stayId: number): Promise<StayDetailsResponse> {
     return this.authenticatedFetch<StayDetailsResponse>(
       `${this.baseURL}/api/dashboard/front-desk/stays/${stayId}/checkout`,
       {
-        method: 'PUT',
+        method: 'POST',
       }
     );
   }

@@ -9,6 +9,7 @@ import { Room } from '../types';
 import { apiService, RoomResponse } from '../services/api';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { compressImage, isValidImageFile, CompressionProgress } from '../utils/imageCompression';
+import { dataCache, cacheKeys } from '../services/dataCache';
 
 // Helper functions for Arabic translations
 const getBedTypeArabic = (bedType?: string): string => {
@@ -156,18 +157,61 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
     loadRoomCategories();
   }, [filter, selectedFloor]);
 
+  // 15-second polling for rooms and categories
+  useEffect(() => {
+    const pollingInterval = setInterval(() => {
+      loadRooms();
+      loadRoomCategories();
+    }, 15000); // Poll every 15 seconds
+    return () => clearInterval(pollingInterval);
+  }, [filter, selectedFloor]);
+
   const loadRoomCategories = async () => {
+    const cacheKey = cacheKeys.rooms.roomCategories();
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
+    }
+
+    // Check cache first
+    const cachedData = dataCache.get<any[]>(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      setRoomCategories(cachedData);
+      setIsCategoriesLoading(false);
+      return;
+    }
+
     setIsCategoriesLoading(true);
     setCategoriesError(null);
-    try {
-      const response = await apiService.getRoomCategories();
-      setRoomCategories(response.content || response || []);
-    } catch (error) {
-      setCategoriesError('فشل تحميل فئات الغرف');
-      console.error('Failed to load room categories:', error);
-    } finally {
-      setIsCategoriesLoading(false);
-    }
+    
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const response = await apiService.getRoomCategories();
+        const categories = response.content || response || [];
+        
+        // Only cache successful responses
+        if (categories.length > 0) {
+          dataCache.set(cacheKey, categories);
+        }
+        
+        setRoomCategories(categories);
+      } catch (error) {
+        setCategoriesError('فشل تحميل فئات الغرف');
+        console.error('Failed to load room categories:', error);
+        // Keep existing cached data if available
+        const existingCache = dataCache.get<any[]>(cacheKey);
+        if (existingCache) {
+          setRoomCategories(existingCache);
+        }
+      } finally {
+        setIsCategoriesLoading(false);
+      }
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
   };
 
   const handleCreateCategory = async () => {
@@ -311,54 +355,84 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   };
 
   const loadRooms = async () => {
+    const cacheKey = cacheKeys.rooms.rooms(filter, selectedFloor);
+    
+    // Check if request is already pending
+    if (dataCache.isPending(cacheKey)) {
+      return;
+    }
+
+    // Check cache first - use cached data regardless of age
+    const cachedData = dataCache.get<Room[]>(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      setRooms(cachedData);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
-    try {
-      const statusParam = filter === 'all' ? undefined : filter.toUpperCase() as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE';
-      const response = await apiService.getRooms(
-        statusParam,
-        selectedFloor === 'all' ? undefined : selectedFloor,
-        0,
-        50
-      );
-      
-      // Transform backend response to Room format
-      const transformedRooms = (response.content || []).map((room: RoomResponse) => ({
-        id: room.id.toString(),
-        number: room.roomNumber,
-        status: room.status.toLowerCase() as Room['status'],
-        floor: room.floor,
-        pricePerNight: room.price,
-        type: room.categoryName || 'Standard',
-        name: `Room ${room.roomNumber}`,
-        maxAdults: room.maxAdults,
-        maxKids: room.maxKids,
-        categoryId: room.categoryId ?? 0,
-        image: room.imageUrl || '',
-        hasWifi: room.hasWifi,
-        numTvs: room.numTvs,
-        viewType: room.viewType,
-        numBeds: room.numBeds,
-        bedType: room.bedType,
-        description: room.description || '',
-        amenities: [
-          room.hasWifi ? 'Wi-Fi' : null,
-          room.numTvs > 0 ? `TV (${room.numTvs})` : null,
-          room.bedType ? `${room.bedType} Bed` : null,
-        ].filter(Boolean) as string[],
-      }));
-      
-      setRooms(transformedRooms);
-    } catch (error: any) {
-      if (error.message && error.message.includes('NetworkError')) {
-        setError('فشل الاتصال بالخادم. يرجى التحقق من اتصال الإنترنت.');
-      } else {
-        setError('فشل تحميل الغرف. الرجاء المحاولة مرة أخرى.');
+    
+    // Make API request
+    const requestPromise = (async () => {
+      try {
+        const statusParam = filter === 'all' ? undefined : filter.toUpperCase() as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE';
+        const response = await apiService.getRooms(
+          statusParam,
+          selectedFloor === 'all' ? undefined : selectedFloor,
+          0,
+          50
+        );
+        
+        // Transform backend response to Room format
+        const transformedRooms = (response.content || []).map((room: RoomResponse) => ({
+          id: room.id.toString(),
+          number: room.roomNumber,
+          status: room.status.toLowerCase() as Room['status'],
+          floor: room.floor,
+          pricePerNight: room.price,
+          type: room.categoryName || 'Standard',
+          name: `Room ${room.roomNumber}`,
+          maxAdults: room.maxAdults,
+          maxKids: room.maxKids,
+          categoryId: room.categoryId ?? 0,
+          image: room.imageUrl || '',
+          hasWifi: room.hasWifi,
+          numTvs: room.numTvs,
+          viewType: room.viewType,
+          numBeds: room.numBeds,
+          bedType: room.bedType,
+          description: room.description || '',
+          amenities: [
+            room.hasWifi ? 'Wi-Fi' : null,
+            room.numTvs > 0 ? `TV (${room.numTvs})` : null,
+            room.bedType ? `${room.bedType} Bed` : null,
+          ].filter(Boolean) as string[],
+        }));
+        
+        // Only cache successful HTTP 200 responses
+        if (transformedRooms.length > 0) {
+          dataCache.set(cacheKey, transformedRooms);
+        }
+        
+        setRooms(transformedRooms);
+      } catch (error: any) {
+        // Keep existing cached data if available (don't overwrite with error)
+        const existingCache = dataCache.get<Room[]>(cacheKey);
+        if (existingCache) {
+          setRooms(existingCache);
+        } else {
+          setError('فشل تحميل الغرف');
+          console.error('Failed to load rooms:', error);
+          setRooms([]);
+        }
+      } finally {
+        setIsLoading(false);
       }
-      setRooms([]);
-    } finally {
-      setIsLoading(false);
-    }
+    })();
+
+    dataCache.setPending(cacheKey, requestPromise);
+    await requestPromise;
   };
 
   const handleCreateRoom = async () => {
