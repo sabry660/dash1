@@ -96,17 +96,21 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
   const calendarScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Load cached data immediately first
+    // Load cached data from localStorage immediately first
     const loadCachedData = () => {
-      const staysCache = dataCache.get<StayDetailsResponse[]>(cacheKeys.reservations.stays());
-      const roomsCache = dataCache.get<RoomResponse[]>(cacheKeys.reservations.rooms());
-      const categoriesCache = dataCache.get<RoomCategoryResponse[]>(cacheKeys.reservations.roomCategories());
-      const requestsCache = dataCache.get<ReservationRequestResponse[]>(cacheKeys.reservations.reservationRequests());
+      try {
+        const staysCache = localStorage.getItem('cache_stays');
+        const roomsCache = localStorage.getItem('cache_rooms');
+        const categoriesCache = localStorage.getItem('cache_categories');
+        const requestsCache = localStorage.getItem('cache_requests');
 
-      if (staysCache) setStays(staysCache);
-      if (roomsCache) setRooms(roomsCache);
-      if (categoriesCache) setRoomCategories(categoriesCache);
-      if (requestsCache) setReservationRequests(requestsCache);
+        if (staysCache) setStays(JSON.parse(staysCache));
+        if (roomsCache) setRooms(JSON.parse(roomsCache));
+        if (categoriesCache) setRoomCategories(JSON.parse(categoriesCache));
+        if (requestsCache) setReservationRequests(JSON.parse(requestsCache));
+      } catch (e) {
+        console.error('Failed to load cached data:', e);
+      }
     };
 
     loadCachedData();
@@ -196,6 +200,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         
         // Cache all responses (including empty)
         dataCache.set(cacheKey, staysData);
+        localStorage.setItem('cache_stays', JSON.stringify(staysData));
         
         setStays(staysData);
       } catch (e: any) {
@@ -236,6 +241,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         
         // Cache all responses (including empty)
         dataCache.set(cacheKey, roomsList);
+        localStorage.setItem('cache_rooms', JSON.stringify(roomsList));
         
         setRooms(roomsList);
       } catch (e) {
@@ -276,6 +282,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         
         // Cache all responses (including empty)
         dataCache.set(cacheKey, categories);
+        localStorage.setItem('cache_categories', JSON.stringify(categories));
         
         setRoomCategories(categories);
       } catch (e) {
@@ -317,6 +324,7 @@ export default function ReservationsSection({ onCheckout }: { onCheckout?: () =>
         
         // Cache even empty arrays (this is the correct state)
         dataCache.set(cacheKey, requests);
+        localStorage.setItem('cache_requests', JSON.stringify(requests));
         
         setReservationRequests(requests);
       } catch (e: any) {

@@ -72,6 +72,7 @@ export default function PricingCalendar() {
       
       // Cache all responses (including empty)
       dataCache.set(cacheKey, categories);
+      localStorage.setItem('cache_categories', JSON.stringify(categories));
       
       setCategories(categories);
     } catch (e) {
@@ -104,6 +105,7 @@ export default function PricingCalendar() {
       
       // Cache all responses (including empty)
       dataCache.set(cacheKey, rooms);
+      localStorage.setItem('cache_rooms_all', JSON.stringify(rooms));
       
       setRooms(rooms);
     } catch (e) {
@@ -137,6 +139,7 @@ export default function PricingCalendar() {
       
       // Cache all responses (including empty)
       dataCache.set(cacheKey, stays);
+      localStorage.setItem('cache_stays', JSON.stringify(stays));
       
       setStays(stays);
     } catch (e) {
@@ -152,7 +155,7 @@ export default function PricingCalendar() {
   };
 
   const loadPricingData = async (forceRefresh = false) => {
-    setIsLoading(true); // Show loading when manually refreshing
+    if (forceRefresh) setIsLoading(true); // Show loading when manually refreshing
     setError(null);
     try {
       await Promise.all([
@@ -164,28 +167,75 @@ export default function PricingCalendar() {
     } catch (e) {
       setError('فشل تحميل بيانات الأسعار');
     } finally {
-      setIsLoading(false);
+      if (forceRefresh) setIsLoading(false);
     }
   };
 
   // Load data on mount
   useEffect(() => {
-    // Load cached data immediately first
+    // Load cached data from localStorage immediately first
     const loadCachedData = () => {
-      const categoriesCache = dataCache.get<RoomCategoryResponse[]>(cacheKeys.rooms.roomCategories());
-      const roomsCache = dataCache.get<RoomResponse[]>(cacheKeys.rooms.rooms('all', 'all'));
-      const staysCache = dataCache.get<StayDetailsResponse[]>(cacheKeys.reservations.stays());
+      try {
+        const categoriesCache = localStorage.getItem('cache_categories');
+        const roomsCache = localStorage.getItem('cache_rooms_all');
+        const staysCache = localStorage.getItem('cache_stays');
 
-      if (categoriesCache) setCategories(categoriesCache);
-      if (roomsCache) setRooms(roomsCache);
-      if (staysCache) setStays(staysCache);
+        if (categoriesCache) setCategories(JSON.parse(categoriesCache));
+        if (roomsCache) setRooms(JSON.parse(roomsCache));
+        if (staysCache) setStays(JSON.parse(staysCache));
+      } catch (e) {
+        console.error('Failed to load cached data:', e);
+      }
     };
 
     loadCachedData();
 
     // Then load fresh data in background
-    loadPricingData();
+    const loadData = async () => {
+      setIsLoading(false); // Don't show loading if we have cached data
+      await Promise.allSettled([
+        loadCategories(),
+        loadRooms(),
+        loadStays()
+      ]);
+      await loadRatesForAllCategories();
+    };
+    loadData();
   }, []);
+
+  // Load rates from localStorage when categories or date range changes
+  useEffect(() => {
+    if (categories.length === 0) return;
+
+    try {
+      const startDate = new Date(currentDate);
+      startDate.setDate(startDate.getDate() - Math.floor(dateRange / 2));
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + dateRange);
+      const from = startDate.toISOString().split('T')[0];
+      const to = endDate.toISOString().split('T')[0];
+
+      const loadedRates: any[] = [];
+      categories.forEach((category: any) => {
+        const ratesCache = localStorage.getItem(`cache_rates_${category.id}_${from}_${to}`);
+        if (ratesCache) {
+          const categoryRooms = rooms.filter((r: RoomResponse) => r.categoryId === category.id);
+          loadedRates.push({
+            category,
+            rates: JSON.parse(ratesCache),
+            rooms: categoryRooms
+          });
+        }
+      });
+      
+      if (loadedRates.length > 0) {
+        setCategoryRates(loadedRates);
+      }
+    } catch (e) {
+      console.error('Failed to load cached rates:', e);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories, currentDate, dateRange, rooms]);
 
   // Reload when date range or current date changes
   useEffect(() => {
@@ -224,6 +274,7 @@ export default function PricingCalendar() {
             .then(rates => {
               // Cache all responses (including empty)
               dataCache.set(cacheKey, rates);
+              localStorage.setItem(`cache_rates_${category.id}_${from}_${to}`, JSON.stringify(rates));
               return rates;
             })
             .catch(err => {
@@ -241,6 +292,7 @@ export default function PricingCalendar() {
           .then(rates => {
             // Cache all responses (including empty)
             dataCache.set(cacheKey, rates);
+            localStorage.setItem(`cache_rates_${category.id}_${from}_${to}`, JSON.stringify(rates));
             return rates;
           })
           .catch(err => {

@@ -49,6 +49,7 @@ export default function SpecialOffersSection() {
         
         // Cache all responses (including empty)
         dataCache.set(cacheKey, sortedOffers);
+        localStorage.setItem('cache_offers', JSON.stringify(sortedOffers));
         
         setOffers(sortedOffers);
       } catch (error: any) {
@@ -74,11 +75,15 @@ export default function SpecialOffersSection() {
   }, []);
 
   useEffect(() => {
-    // Load cached data immediately first
-    const offersCache = dataCache.get<SpecialOfferResponse[]>(cacheKeys.specialOffers.offers());
+    // Load cached data from localStorage immediately first
+    const offersCache = localStorage.getItem('cache_offers');
     if (offersCache) {
-      setOffers(offersCache);
-      setIsLoading(false);
+      try {
+        setOffers(JSON.parse(offersCache));
+        setIsLoading(false);
+      } catch (e) {
+        console.error('Failed to load cached offers:', e);
+      }
     }
 
     // Then load fresh data in background

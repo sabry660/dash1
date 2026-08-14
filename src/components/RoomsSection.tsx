@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   BedDouble, Sparkles, Hammer, CheckCircle2, User, Filter, Layers, 
   Grid3X3, List, Search, ChevronLeft, Eye, Edit, 
-  Calendar, MapPin, Users, Clock, X, Save, Building2, Image as ImageIcon, Star, Loader2, Plus, Trash2, Wifi, Tv, Check
+  Calendar, MapPin, Users, Clock, X, Save, Building2, Image as ImageIcon, Star, Loader2, Plus, Trash2, Wifi, Tv, Check, DollarSign
 } from 'lucide-react';
 import { Room } from '../types';
 import { apiService, RoomResponse } from '../services/api';
@@ -26,6 +26,7 @@ const getViewTypeArabic = (viewType?: string): string => {
   const translations: Record<string, string> = {
     'CITY': 'مدينة',
     'PANORAMIC': 'بانوراما',
+    'PANAROMIC': 'بانوراما',
     'SEA': 'بحر',
     'GARDEN': 'حديقة',
     'MOUNTAIN': 'جبل',
@@ -58,7 +59,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | Room['status']>(() => {
     const saved = localStorage.getItem('rooms_filter');
-    return (saved === 'all' || saved === 'AVAILABLE' || saved === 'OCCUPIED' || saved === 'CLEANING' || saved === 'MAINTENANCE') ? saved : 'all';
+    return (saved === 'all' || saved === 'available' || saved === 'occupied' || saved === 'cleaning' || saved === 'maintenance') ? saved : 'all';
   });
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     const saved = localStorage.getItem('rooms_viewMode');
@@ -66,7 +67,9 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   });
   const [selectedFloor, setSelectedFloor] = useState<number | 'all'>(() => {
     const saved = localStorage.getItem('rooms_selectedFloor');
-    return saved === 'all' ? 'all' : parseInt(saved) || 'all';
+    if (saved === 'all') return 'all';
+    const parsed = parseInt(saved || '');
+    return isNaN(parsed) ? 'all' : parsed;
   });
   const [searchQuery, setSearchQuery] = useState(() => {
     const saved = localStorage.getItem('rooms_searchQuery');
@@ -106,11 +109,12 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   
   // Create Room Modal State
   const [createRoomModalOpen, setCreateRoomModalOpen] = useState(false);
+  const [selectedCategoryForDetails, setSelectedCategoryForDetails] = useState<any>(null);
   const [newRoom, setNewRoom] = useState({
     roomNumber: '',
     categoryId: 0,
-    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
     floor: 2,
+    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
   });
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [createRoomError, setCreateRoomError] = useState<string | null>(null);
@@ -138,6 +142,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
     maxKids: 0,
     hasWifi: true,
     numTvs: 1,
+    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
   });
   const [editCategoryImageFile, setEditCategoryImageFile] = useState<File | null>(null);
   const [editCategoryImagePreview, setEditCategoryImagePreview] = useState<string | null>(null);
@@ -160,41 +165,39 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
     maxKids: 0,
     hasWifi: true,
     numTvs: 1,
+    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
   });
 
   // Edit Room Modal State
   const [editRoomModalOpen, setEditRoomModalOpen] = useState(false);
   const [editRoomData, setEditRoomData] = useState({
     roomNumber: '',
-    maxAdults: 2,
-    maxKids: 0,
-    description: '',
     floor: 2,
-    price: 0,
-    roomType: 'SINGLE' as 'SINGLE' | 'DOUBLE' | 'SUITE',
-    hasWifi: true,
-    numTvs: 1,
-    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
-    numBeds: 1,
-    bedType: 'DOUBLE' as 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING',
-    status: 'AVAILABLE' as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE',
     categoryId: 0,
+    status: 'AVAILABLE' as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE',
+    viewType: 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
   });
   const [isUpdatingRoom, setIsUpdatingRoom] = useState(false);
   const [updateRoomError, setUpdateRoomError] = useState<string | null>(null);
   const [editRoomImageFile, setEditRoomImageFile] = useState<File | null>(null);
   const [editRoomImagePreview, setEditRoomImagePreview] = useState<string | null>(null);
+  const [isCompressingImageEdit, setIsCompressingImageEdit] = useState(false);
+  const [compressionProgressEdit, setCompressionProgressEdit] = useState<CompressionProgress | null>(null);
 
   const floors = [2, 3, 4, 5];
 
   useEffect(() => {
-    // Load cached data immediately first
+    // Load cached data from localStorage immediately first
     const loadCachedData = () => {
-      const roomsCache = dataCache.get<Room[]>(cacheKeys.rooms.rooms(filter, selectedFloor));
-      const categoriesCache = dataCache.get<any[]>(cacheKeys.rooms.roomCategories());
+      try {
+        const roomsCache = localStorage.getItem('cache_rooms_all');
+        const categoriesCache = localStorage.getItem('cache_categories');
 
-      if (roomsCache) setRooms(roomsCache);
-      if (categoriesCache) setRoomCategories(categoriesCache);
+        if (roomsCache) setRooms(JSON.parse(roomsCache));
+        if (categoriesCache) setRoomCategories(JSON.parse(categoriesCache));
+      } catch (e) {
+        console.error('Failed to load cached data:', e);
+      }
     };
 
     loadCachedData();
@@ -240,6 +243,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         
         // Cache all responses (including empty)
         dataCache.set(cacheKey, categories);
+        localStorage.setItem('cache_categories', JSON.stringify(categories));
         
         setRoomCategories(categories);
       } catch (error) {
@@ -280,6 +284,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         maxKids: 0,
         hasWifi: true,
         numTvs: 1,
+        viewType: 'CITY',
       });
       loadRoomCategories();
     } catch (e) {
@@ -301,6 +306,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       maxKids: category.maxKids,
       hasWifi: category.hasWifi,
       numTvs: category.numTvs,
+      viewType: category.viewType || 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
     });
     setEditCategoryImagePreview(category.imageUrl || null);
     setIsEditCategoryModalOpen(true);
@@ -330,6 +336,18 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
       setIsEditCategoryModalOpen(false);
       setEditCategoryImageFile(null);
       setEditCategoryImagePreview(null);
+      setEditCategoryData({
+        name: '',
+        description: '',
+        price: 0,
+        numBeds: 1,
+        bedType: 'DOUBLE',
+        maxAdults: 2,
+        maxKids: 0,
+        hasWifi: true,
+        numTvs: 1,
+        viewType: 'CITY',
+      });
       loadRoomCategories();
     } catch (e) {
       setEditCategoryError('فشل تحديث فئة الغرفة');
@@ -432,12 +450,12 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         // Transform backend response to Room format
         const transformedRooms = (response.content || []).map((room: RoomResponse) => ({
           id: room.id.toString(),
-          number: room.roomNumber,
+          number: room.roomNumber || room.id.toString(),
           status: room.status.toLowerCase() as Room['status'],
           floor: room.floor,
           pricePerNight: room.price,
           type: room.categoryName || 'Standard',
-          name: `Room ${room.roomNumber}`,
+          name: `Room ${room.roomNumber || room.id}`,
           maxAdults: room.maxAdults,
           maxKids: room.maxKids,
           categoryId: room.categoryId ?? 0,
@@ -454,9 +472,12 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
             room.bedType ? `${room.bedType} Bed` : null,
           ].filter(Boolean) as string[],
         }));
+
+        console.log('Transformed rooms sample:', transformedRooms[0]);
         
         // Cache all responses (including empty)
         dataCache.set(cacheKey, transformedRooms);
+        localStorage.setItem('cache_rooms_all', JSON.stringify(transformedRooms));
         
         setRooms(transformedRooms);
       } catch (error: any) {
@@ -500,7 +521,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         setCompressionProgress({ progress: 0, isCompressing: true, isUploading: false });
         
         try {
-          const compressedFile = await compressImage(roomImageFile, {}, (progress) => {
+          const compressedFile = await compressImage(roomImageFile, { maxSizeMB: 1, initialQuality: 0.8 }, (progress) => {
             setCompressionProgress(progress);
           });
           
@@ -514,19 +535,22 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
           setCompressionProgress(null);
         }
       }
-      
+
       // Reset form and close modal
       setNewRoom({
         roomNumber: '',
         categoryId: 0,
-        viewType: 'CITY',
         floor: 2,
+        viewType: 'CITY',
       });
       setRoomImageFile(null);
       setRoomImagePreview(null);
       setCreateRoomModalOpen(false);
       
-      // Reload rooms
+      // Reload rooms with force refresh
+      const cacheKey = cacheKeys.rooms.rooms(filter, selectedFloor);
+      dataCache.clear(cacheKey);
+      localStorage.removeItem('cache_rooms_all');
       loadRooms();
     } catch (error: any) {
       setCreateRoomError('فشل إنشاء الغرفة. الرجاء المحاولة مرة أخرى.');
@@ -554,8 +578,8 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
   };
 
   const handleUpdateRoom = async () => {
-    if (!editingRoom || !editRoomData.roomNumber || !editRoomData.categoryId || editRoomData.price <= 0) {
-      setUpdateRoomError('يرجى إدخال رقم الغرفة والسعر والفئة');
+    if (!editingRoom || !editRoomData.roomNumber || !editRoomData.categoryId) {
+      setUpdateRoomError('يرجى إدخال رقم الغرفة والفئة');
       return;
     }
 
@@ -569,59 +593,53 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
         roomNumber: editRoomData.roomNumber,
         categoryId,
         floor: editRoomData.floor,
-        viewType: editRoomData.viewType,
-        description: editRoomData.description,
         status: editRoomData.status,
+        viewType: editRoomData.viewType,
       });
 
       // Upload image if provided
       if (editRoomImageFile) {
         try {
-          setIsCompressingImage(true);
-          setCompressionProgress({ progress: 0, isCompressing: true, isUploading: false });
+          setIsCompressingImageEdit(true);
+          setCompressionProgressEdit({ progress: 0, isCompressing: true, isUploading: false });
           
-          const compressedFile = await compressImage(editRoomImageFile, {}, (progress) => {
-            setCompressionProgress(progress);
+          const compressedFile = await compressImage(editRoomImageFile, { maxSizeMB: 1, initialQuality: 0.8 }, (progress) => {
+            setCompressionProgressEdit(progress);
           });
           
-          setCompressionProgress({ progress: 0, isCompressing: false, isUploading: true });
+          setCompressionProgressEdit({ progress: 0, isCompressing: false, isUploading: true });
           await apiService.uploadRoomImage(roomId, compressedFile);
         } catch (uploadError: any) {
           console.error('Image upload failed:', uploadError);
           // Don't alert - just log and continue
           // The room data was updated successfully, just image failed
         } finally {
-          setIsCompressingImage(false);
-          setCompressionProgress(null);
+          setIsCompressingImageEdit(false);
+          setCompressionProgressEdit(null);
         }
       }
-      
+
       // Reset form and close modal
       setEditRoomData({
         roomNumber: '',
-        maxAdults: 2,
-        maxKids: 0,
-        description: '',
         floor: 2,
-        price: 0,
-        roomType: 'SINGLE',
-        hasWifi: true,
-        numTvs: 1,
-        viewType: 'CITY',
-        numBeds: 1,
-        bedType: 'DOUBLE',
-        status: 'AVAILABLE',
         categoryId: 0,
+        status: 'AVAILABLE',
+        viewType: 'CITY',
       });
       setEditRoomImageFile(null);
       setEditRoomImagePreview(null);
       setEditRoomModalOpen(false);
       setEditingRoom(null);
       
-      // Reload rooms
+      // Reload rooms with force refresh
+      const cacheKey = cacheKeys.rooms.rooms(filter, selectedFloor);
+      dataCache.clear(cacheKey);
+      localStorage.removeItem('cache_rooms_all');
       loadRooms();
     } catch (error: any) {
-      setUpdateRoomError('فشل تحديث الغرفة. الرجاء المحاولة مرة أخرى.');
+      console.error('Update room error:', error);
+      setUpdateRoomError(error?.message || 'فشل تحديث الغرفة. الرجاء المحاولة مرة أخرى.');
     } finally {
       setIsUpdatingRoom(false);
     }
@@ -649,18 +667,18 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
     const matchesFilter = filter === 'all' || room.status === filter;
     const matchesFloor = selectedFloor === 'all' || room.floor === selectedFloor;
     const matchesSearch = searchQuery === '' || 
-      room.number.includes(searchQuery) || 
-      room.name.includes(searchQuery) ||
-      room.type.includes(searchQuery);
+      (room.number || '').includes(searchQuery) || 
+      (room.name || '').includes(searchQuery) ||
+      (room.type || '').includes(searchQuery);
     return matchesFilter && matchesFloor && matchesSearch;
   });
 
   const sortedRooms = [...filteredRooms].sort((a, b) => {
     switch (sortBy) {
-      case 'number': return b.number.localeCompare(a.number);
-      case 'price': return b.pricePerNight - a.pricePerNight;
-      case 'floor': return b.floor - a.floor;
-      case 'status': return a.status.localeCompare(b.status);
+      case 'number': return (b.number || '').localeCompare(a.number || '');
+      case 'price': return (b.pricePerNight || 0) - (a.pricePerNight || 0);
+      case 'floor': return (b.floor || 0) - (a.floor || 0);
+      case 'status': return (a.status || '').localeCompare(b.status || '');
       default: return 0;
     }
   });
@@ -984,7 +1002,6 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                   <div className="flex items-center justify-between mb-4">
                     <div>
                       <h3 className="text-2xl font-black text-[#AA7B30]">{room.number}</h3>
-                      <p className="text-sm text-gray-500">{room.categoryName || 'غير محدد'}</p>
                     </div>
                   </div>
 
@@ -1000,13 +1017,15 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                     </div>
 
                     {/* View Type */}
-                    <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                      <MapPin size={16} className="text-gray-400" />
-                      <div>
-                        <span className="block text-gray-400 text-xs">الإطلالة</span>
-                        <span className="font-bold text-gray-800">{getViewTypeArabic(room.viewType)}</span>
+                    {room.viewType && (
+                      <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
+                        <MapPin size={16} className="text-gray-400" />
+                        <div>
+                          <span className="block text-gray-400 text-xs">الإطلالة</span>
+                          <span className="font-bold text-gray-800">{getViewTypeArabic(room.viewType)}</span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* Description */}
@@ -1030,19 +1049,10 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         setEditingRoom(room);
                         setEditRoomData({
                           roomNumber: room.number,
-                          maxAdults: room.maxAdults || 2,
-                          maxKids: room.maxKids || 0,
-                          description: room.description || '',
                           floor: room.floor,
-                          price: room.pricePerNight || 0,
-                          roomType: (room.type === 'Standard' ? 'SINGLE' : room.type === 'Deluxe' ? 'DOUBLE' : 'SUITE') as 'SINGLE' | 'DOUBLE' | 'SUITE',
-                          hasWifi: room.hasWifi || true,
-                          numTvs: room.numTvs || 1,
-                          viewType: room.viewType || 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
-                          numBeds: room.numBeds || 1,
-                          bedType: room.bedType || 'DOUBLE' as 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING',
-                          status: room.status.toUpperCase() as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE',
                           categoryId: Number(room.categoryId ?? 0),
+                          status: room.status.toUpperCase() as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE',
+                          viewType: room.viewType || 'CITY' as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK',
                         });
                         setEditRoomImagePreview(room.image || null);
                         setEditRoomModalOpen(true);
@@ -1351,13 +1361,6 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         <span>تعديل</span>
                       </button>
                       <button
-                        onClick={() => handleOpenRatesModal(category)}
-                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border border-gray-200 rounded-lg text-sm font-bold text-gray-600 hover:text-gray-900 hover:border-[#D4AF37]/30 hover:bg-amber-50 transition-all duration-300"
-                      >
-                        <Calendar size={16} />
-                        <span>الأسعار</span>
-                      </button>
-                      <button
                         onClick={() => handleDeleteCategory(category.id)}
                         className="px-3 py-2.5 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm font-bold hover:bg-red-100 transition"
                       >
@@ -1493,19 +1496,39 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                     disabled={isCreatingCategory}
                   />
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                  <Wifi size={16} className={newCategory.hasWifi ? "text-green-500" : "text-gray-400"} />
-                  <div>
-                    <span className="block text-gray-400 text-xs">واي فاي</span>
-                    <span className="font-bold text-gray-800">{newCategory.hasWifi ? 'متاح' : 'غير متاح'}</span>
-                  </div>
-                  <button
-                    onClick={() => setNewCategory({ ...newCategory, hasWifi: !newCategory.hasWifi })}
-                    className="ml-auto text-[#D4AF37] hover:text-[#AA7B30]"
+                <div>
+                  <label className="text-xs font-bold text-gray-400 block mb-2">نوع المنظر *</label>
+                  <select
+                    value={newCategory.viewType}
+                    onChange={(e) => setNewCategory({ ...newCategory, viewType: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
+                    disabled={isCreatingCategory}
                   >
-                    {newCategory.hasWifi ? <Check size={16} /> : <X size={16} />}
-                  </button>
+                    <option value="CITY">مدينة</option>
+                    <option value="PANORAMIC">بانوراما</option>
+                    <option value="PANAROMIC">بانوراما (PANAROMIC)</option>
+                    <option value="SEA">بحر</option>
+                    <option value="GARDEN">حديقة</option>
+                    <option value="MOUNTAIN">جبل</option>
+                    <option value="POOL">مسبح</option>
+                    <option value="RIVER">نهر</option>
+                    <option value="LANDMARK">معلم</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
+                <Wifi size={16} className={newCategory.hasWifi ? "text-green-500" : "text-gray-400"} />
+                <div>
+                  <span className="block text-gray-400 text-xs">واي فاي</span>
+                  <span className="font-bold text-gray-800">{newCategory.hasWifi ? 'متاح' : 'غير متاح'}</span>
+                </div>
+                <button
+                  onClick={() => setNewCategory({ ...newCategory, hasWifi: !newCategory.hasWifi })}
+                  className="ml-auto text-[#D4AF37] hover:text-[#AA7B30]"
+                >
+                  {newCategory.hasWifi ? <Check size={16} /> : <X size={16} />}
+                </button>
               </div>
             </div>
 
@@ -1647,19 +1670,39 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                     disabled={isUpdatingCategory}
                   />
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
-                  <Wifi size={16} className={editCategoryData.hasWifi ? "text-green-500" : "text-gray-400"} />
-                  <div>
-                    <span className="block text-gray-400 text-xs">واي فاي</span>
-                    <span className="font-bold text-gray-800">{editCategoryData.hasWifi ? 'متاح' : 'غير متاح'}</span>
-                  </div>
-                  <button
-                    onClick={() => setEditCategoryData({ ...editCategoryData, hasWifi: !editCategoryData.hasWifi })}
-                    className="ml-auto text-[#D4AF37] hover:text-[#AA7B30]"
+                <div>
+                  <label className="text-xs font-bold text-gray-400 block mb-2">نوع المنظر *</label>
+                  <select
+                    value={editCategoryData.viewType}
+                    onChange={(e) => setEditCategoryData({ ...editCategoryData, viewType: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
+                    disabled={isUpdatingCategory}
                   >
-                    {editCategoryData.hasWifi ? <Check size={16} /> : <X size={16} />}
-                  </button>
+                    <option value="CITY">مدينة</option>
+                    <option value="PANORAMIC">بانوراما</option>
+                    <option value="PANAROMIC">بانوراما (PANAROMIC)</option>
+                    <option value="SEA">بحر</option>
+                    <option value="GARDEN">حديقة</option>
+                    <option value="MOUNTAIN">جبل</option>
+                    <option value="POOL">مسبح</option>
+                    <option value="RIVER">نهر</option>
+                    <option value="LANDMARK">معلم</option>
+                  </select>
                 </div>
+              </div>
+
+              <div className="flex items-center gap-2 bg-gray-50 p-3 rounded-xl">
+                <Wifi size={16} className={editCategoryData.hasWifi ? "text-green-500" : "text-gray-400"} />
+                <div>
+                  <span className="block text-gray-400 text-xs">واي فاي</span>
+                  <span className="font-bold text-gray-800">{editCategoryData.hasWifi ? 'متاح' : 'غير متاح'}</span>
+                </div>
+                <button
+                  onClick={() => setEditCategoryData({ ...editCategoryData, hasWifi: !editCategoryData.hasWifi })}
+                  className="ml-auto text-[#D4AF37] hover:text-[#AA7B30]"
+                >
+                  {editCategoryData.hasWifi ? <Check size={16} /> : <X size={16} />}
+                </button>
               </div>
 
               <div>
@@ -1790,6 +1833,76 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
           </div>
         </div>
       )}
+
+      {/* Category Details Modal */}
+      <AnimatePresence>
+        {selectedCategoryForDetails && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            style={{ background: 'rgba(0,0,0,0.5)' }}
+            onClick={() => setSelectedCategoryForDetails(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white border border-gray-200 rounded-2xl p-6 max-w-md w-full relative space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start border-b pb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-[#AA7B30]">{selectedCategoryForDetails.name}</h3>
+                  <p className="text-sm mt-1 text-gray-500">{selectedCategoryForDetails.description || 'لا يوجد وصف'}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedCategoryForDetails(null)}
+                  className="p-2 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400">السعر الأساسي</span>
+                  <span className="text-sm font-bold block mt-1 text-[#AA7B30]">{selectedCategoryForDetails.price} ر.س</span>
+                </div>
+                <div className="p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400">عدد الأسرة</span>
+                  <span className="text-sm font-bold block mt-1">{selectedCategoryForDetails.numBeds}</span>
+                </div>
+                <div className="p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400">نوع السرير</span>
+                  <span className="text-sm font-bold block mt-1">{selectedCategoryForDetails.bedType}</span>
+                </div>
+                <div className="p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400">أقصى بالغين</span>
+                  <span className="text-sm font-bold block mt-1">{selectedCategoryForDetails.maxAdults}</span>
+                </div>
+                <div className="p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400">أقصى أطفال</span>
+                  <span className="text-sm font-bold block mt-1">{selectedCategoryForDetails.maxKids}</span>
+                </div>
+                <div className="p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400">عدد التلفزيونات</span>
+                  <span className="text-sm font-bold block mt-1">{selectedCategoryForDetails.numTvs}</span>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="flex-1 p-3 border rounded-xl bg-gray-50">
+                  <span className="block text-gray-400 text-xs">Wi-Fi</span>
+                  <span className="text-sm font-bold block mt-1">{selectedCategoryForDetails.hasWifi ? 'متاح' : 'غير متاح'}</span>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Room Details Modal */}
       <AnimatePresence>
@@ -1980,17 +2093,28 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                   {/* Room Category */}
                   <div>
                     <label className="text-xs font-bold text-gray-400 block mb-2">فئة الغرفة *</label>
-                    <select
-                      value={newRoom.categoryId}
-                      onChange={(e) => setNewRoom({ ...newRoom, categoryId: parseInt(e.target.value) })}
-                      className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                      disabled={isCreatingRoom}
-                    >
-                      <option value={0}>اختر فئة الغرفة</option>
-                      {roomCategories.map((cat) => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
-                      ))}
-                    </select>
+                    <div className="flex gap-2">
+                      <select
+                        value={newRoom.categoryId}
+                        onChange={(e) => setNewRoom({ ...newRoom, categoryId: parseInt(e.target.value) })}
+                        className="flex-1 bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
+                        disabled={isCreatingRoom}
+                      >
+                        <option value={0}>اختر فئة الغرفة</option>
+                        {roomCategories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        ))}
+                      </select>
+                      {newRoom.categoryId > 0 && (
+                        <button
+                          onClick={() => setSelectedCategoryForDetails(roomCategories.find(cat => cat.id === newRoom.categoryId))}
+                          className="px-4 py-3 bg-[#D4AF37] text-white rounded-xl text-sm font-bold hover:bg-[#AA7B30] transition"
+                          type="button"
+                        >
+                          التفاصيل
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Floor */}
@@ -2019,6 +2143,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                     >
                       <option value="CITY">المدينة</option>
                       <option value="PANORAMIC">بانورامية</option>
+                      <option value="PANAROMIC">بانورامية (PANAROMIC)</option>
                       <option value="SEA">البحر</option>
                       <option value="GARDEN">الحديقة</option>
                       <option value="MOUNTAIN">الجبل</option>
@@ -2064,12 +2189,12 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                           </label>
                         </div>
                       )}
-                      {compressionProgress && (
-                        <div className="text-xs text-gray-500">
-                          {compressionProgress.isCompressing && <span>جاري ضغط الصورة... {compressionProgress.progress}%</span>}
-                          {compressionProgress.isUploading && <span>جاري رفع الصورة...</span>}
-                        </div>
-                      )}
+                    {compressionProgress && (
+                      <div className="text-xs text-gray-500">
+                        {compressionProgress.isCompressing && <span>جاري ضغط الصورة... {compressionProgress.progress}%</span>}
+                        {compressionProgress.isUploading && <span>جاري رفع الصورة...</span>}
+                      </div>
+                    )}
                     </div>
                   </div>
 
@@ -2145,149 +2270,22 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
 
                 {/* Floor */}
                 <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">الطابق</label>
-                  <input
-                    type="number"
+                  <label className="text-xs font-bold text-gray-400 block mb-2">الطابق *</label>
+                  <select
                     value={editRoomData.floor}
                     onChange={(e) => setEditRoomData({ ...editRoomData, floor: parseInt(e.target.value) })}
                     className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    placeholder="مثال: 5"
-                    disabled={isUpdatingRoom}
-                  />
-                </div>
-
-                {/* Price */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">السعر لليلة *</label>
-                  <input
-                    type="number"
-                    value={editRoomData.price}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, price: parseFloat(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    placeholder="مثال: 1500"
-                    disabled={isUpdatingRoom}
-                  />
-                </div>
-
-                {/* Room Type */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">نوع الغرفة</label>
-                  <select
-                    value={editRoomData.roomType}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, roomType: e.target.value as 'SINGLE' | 'DOUBLE' | 'SUITE' })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
                     disabled={isUpdatingRoom}
                   >
-                    <option value="SINGLE">غرفة مفردة</option>
-                    <option value="DOUBLE">غرفة مزدوجة</option>
-                    <option value="SUITE">جناح</option>
+                    {floors.map((floor) => (
+                      <option key={floor} value={floor}>الطابق {floor}</option>
+                    ))}
                   </select>
-                </div>
-
-                {/* Bed Type */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">نوع السرير</label>
-                  <select
-                    value={editRoomData.bedType}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, bedType: e.target.value as 'TWIN' | 'DOUBLE' | 'QUEEN' | 'KING' })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    disabled={isUpdatingRoom}
-                  >
-                    <option value="TWIN">سريرين منفصلين</option>
-                    <option value="DOUBLE">سرير مزدوج</option>
-                    <option value="QUEEN">سرير كوين</option>
-                    <option value="KING">سرير كينج</option>
-                  </select>
-                </div>
-
-                {/* Number of Beds */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">عدد الأسرة</label>
-                  <input
-                    type="number"
-                    value={editRoomData.numBeds}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, numBeds: parseInt(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    placeholder="مثال: 2"
-                    disabled={isUpdatingRoom}
-                  />
-                </div>
-
-                {/* Max Adults */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">أقصى عدد بالغين</label>
-                  <input
-                    type="number"
-                    value={editRoomData.maxAdults}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, maxAdults: parseInt(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    placeholder="مثال: 2"
-                    disabled={isUpdatingRoom}
-                  />
-                </div>
-
-                {/* Max Kids */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">أقصى عدد أطفال</label>
-                  <input
-                    type="number"
-                    value={editRoomData.maxKids}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, maxKids: parseInt(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    placeholder="مثال: 1"
-                    disabled={isUpdatingRoom}
-                  />
-                </div>
-
-                {/* Number of TVs */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">عدد التلفزيونات</label>
-                  <input
-                    type="number"
-                    value={editRoomData.numTvs}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, numTvs: parseInt(e.target.value) })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    placeholder="مثال: 1"
-                    disabled={isUpdatingRoom}
-                  />
-                </div>
-
-                {/* View Type */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">الإطلالة</label>
-                  <select
-                    value={editRoomData.viewType}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, viewType: e.target.value as 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK' })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
-                    disabled={isUpdatingRoom}
-                  >
-                    <option value="CITY">المدينة</option>
-                    <option value="PANORAMIC">بانورامية</option>
-                    <option value="SEA">البحر</option>
-                    <option value="GARDEN">الحديقة</option>
-                    <option value="MOUNTAIN">الجبل</option>
-                    <option value="POOL">المسبح</option>
-                    <option value="RIVER">النهر</option>
-                    <option value="LANDMARK">معلم سياحي</option>
-                  </select>
-                </div>
-
-                {/* Wi-Fi */}
-                <div className="flex items-center gap-3">
-                  <input
-                    type="checkbox"
-                    id="editHasWifi"
-                    checked={editRoomData.hasWifi}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, hasWifi: e.target.checked })}
-                    className="w-5 h-5 rounded border-gray-300 text-[#D4AF37] focus:ring-[#D4AF37]"
-                    disabled={isUpdatingRoom}
-                  />
-                  <label htmlFor="editHasWifi" className="text-xs font-bold text-gray-400">متاح Wi-Fi</label>
                 </div>
 
                 {/* Status */}
                 <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">الحالة</label>
+                  <label className="text-xs font-bold text-gray-400 block mb-2">الحالة *</label>
                   <select
                     value={editRoomData.status}
                     onChange={(e) => setEditRoomData({ ...editRoomData, status: e.target.value as 'AVAILABLE' | 'OCCUPIED' | 'CLEANING' | 'MAINTENANCE' })}
@@ -2298,6 +2296,27 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                     <option value="OCCUPIED">مشغول</option>
                     <option value="CLEANING">تنظيف</option>
                     <option value="MAINTENANCE">صيانة</option>
+                  </select>
+                </div>
+
+                {/* View Type */}
+                <div>
+                  <label className="text-xs font-bold text-gray-400 block mb-2">نوع الإطلالة *</label>
+                  <select
+                    value={editRoomData.viewType}
+                    onChange={(e) => setEditRoomData({ ...editRoomData, viewType: e.target.value as any })}
+                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none"
+                    disabled={isUpdatingRoom}
+                  >
+                    <option value="CITY">المدينة</option>
+                    <option value="PANORAMIC">بانورامية</option>
+                    <option value="PANAROMIC">بانورامية (PANAROMIC)</option>
+                    <option value="SEA">البحر</option>
+                    <option value="GARDEN">الحديقة</option>
+                    <option value="MOUNTAIN">الجبل</option>
+                    <option value="POOL">المسبح</option>
+                    <option value="RIVER">النهر</option>
+                    <option value="LANDMARK">معلم سياحي</option>
                   </select>
                 </div>
 
@@ -2315,7 +2334,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         <button
                           onClick={handleEditRemoveImage}
                           className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
-                          disabled={isUpdatingRoom || isCompressingImage}
+                          disabled={isUpdatingRoom || isCompressingImageEdit}
                         >
                           <X size={16} />
                         </button>
@@ -2328,7 +2347,7 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                           onChange={handleEditImageSelect}
                           className="hidden"
                           id="editRoomImageInput"
-                          disabled={isUpdatingRoom || isCompressingImage}
+                          disabled={isUpdatingRoom || isCompressingImageEdit}
                         />
                         <label htmlFor="editRoomImageInput" className="cursor-pointer">
                           <ImageIcon size={32} className="mx-auto text-gray-400 mb-2" />
@@ -2337,26 +2356,13 @@ export default function RoomsSection({ rooms: initialRooms = [], onUpdateRoomSta
                         </label>
                       </div>
                     )}
-                    {compressionProgress && (
+                    {compressionProgressEdit && (
                       <div className="text-xs text-gray-500">
-                        {compressionProgress.isCompressing && <span>جاري ضغط الصورة... {compressionProgress.progress}%</span>}
-                        {compressionProgress.isUploading && <span>جاري رفع الصورة...</span>}
+                        {compressionProgressEdit.isCompressing && <span>جاري ضغط الصورة... {compressionProgressEdit.progress}%</span>}
+                        {compressionProgressEdit.isUploading && <span>جاري رفع الصورة...</span>}
                       </div>
                     )}
                   </div>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="text-xs font-bold text-gray-400 block mb-2">الوصف</label>
-                  <textarea
-                    value={editRoomData.description}
-                    onChange={(e) => setEditRoomData({ ...editRoomData, description: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-200 focus:border-[#D4AF37] rounded-xl px-4 py-3 text-sm text-gray-800 focus:outline-none resize-none"
-                    rows={3}
-                    placeholder="وصف الغرفة..."
-                    disabled={isUpdatingRoom}
-                  />
                 </div>
 
                 <div className="flex gap-3 pt-4 border-t border-gray-200">

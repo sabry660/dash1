@@ -130,6 +130,7 @@ interface CreateRoomCategoryRequest {
   maxKids: number;
   hasWifi: boolean;
   numTvs: number;
+  viewType: 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK';
 }
 
 interface UpdateRoomCategoryRequest {
@@ -142,6 +143,7 @@ interface UpdateRoomCategoryRequest {
   maxKids?: number;
   hasWifi?: boolean;
   numTvs?: number;
+  viewType?: 'CITY' | 'PANORAMIC' | 'SEA' | 'GARDEN' | 'MOUNTAIN' | 'POOL' | 'RIVER' | 'LANDMARK';
 }
 
 interface DailyRateResponse {
