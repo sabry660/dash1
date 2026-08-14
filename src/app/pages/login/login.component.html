@@ -1,0 +1,140 @@
+<div class="login-container">
+
+  <div class="login-card">
+
+    <!-- Brand -->
+    <div class="brand">
+      <div class="brand-mark">H</div>
+      <div class="brand-name">Hotel Management</div>
+    </div>
+
+
+    <!-- Header -->
+    <div class="login-header">
+      <h2>Welcome back</h2>
+
+      <p>
+        Sign in to access your hotel dashboard.
+      </p>
+    </div>
+
+
+    <!-- Form -->
+    <form
+      [formGroup]="loginForm"
+      (ngSubmit)="onSubmit()"
+    >
+
+      <!-- Username -->
+      <div class="form-group">
+
+        <label for="username">
+          Username
+        </label>
+
+        <input
+          id="username"
+          type="text"
+          formControlName="username"
+          placeholder="Enter your username"
+          class="form-control"
+          autocomplete="username"
+        />
+
+        <div
+          *ngIf="
+            loginForm.get('username')?.invalid &&
+            loginForm.get('username')?.touched
+          "
+          class="error"
+        >
+          Username is required.
+        </div>
+
+      </div>
+
+
+      <!-- Password -->
+      <div class="form-group">
+
+        <label for="password">
+          Password
+        </label>
+
+        <input
+          id="password"
+          type="password"
+          formControlName="password"
+          placeholder="Enter your password"
+          class="form-control"
+          autocomplete="current-password"
+        />
+
+        <div
+          *ngIf="
+            loginForm.get('password')?.invalid &&
+            loginForm.get('password')?.touched
+          "
+          class="error"
+        >
+          Password is required.
+        </div>
+
+      </div>
+
+
+      <!-- Hotel ID -->
+      <div class="form-group">
+
+        <label for="hotelId">
+          Hotel ID
+        </label>
+
+        <input
+          id="hotelId"
+          type="text"
+          formControlName="hotelId"
+          placeholder="e.g. grand-hotel"
+          class="form-control"
+        />
+
+        <div
+          *ngIf="
+            loginForm.get('hotelId')?.invalid &&
+            loginForm.get('hotelId')?.touched
+          "
+          class="error"
+        >
+          Hotel ID is required.
+        </div>
+
+      </div>
+
+
+      <!-- Login -->
+      <button
+        type="submit"
+        [disabled]="loginForm.invalid || isLoading"
+      >
+        {{ isLoading ? 'Signing in...' : 'Sign in' }}
+      </button>
+
+
+      <!-- Error -->
+      <div
+        *ngIf="errorMessage"
+        class="error-message"
+      >
+        {{ errorMessage }}
+      </div>
+
+    </form>
+
+
+    <div class="login-footer">
+      Secure hotel management platform
+    </div>
+
+  </div>
+
+</div>

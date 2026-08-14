@@ -1,117 +1,59 @@
-# Dash1 Hotel Management Dashboard
+# Dashboard
 
-This repository contains the frontend application for a hotel management dashboard built with React and TypeScript. The application supports room management, reservations, guest services, housekeeping, restaurant and cafe operations, special offers, and analytics.
+This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 19.2.12.
 
-## Features
+## Development server
 
-- Room management with status tracking, occupancy monitoring, and maintenance workflows
-- Room category management with pricing and specifications
-- Reservation management including booking, check-in, and check-out workflows
-- Landing page reservation handling with approval and rejection flows
-- Guest service request handling for room service, restaurant, and cafe orders
-- Menu and special offer management with image support
-- Housekeeping coordination with room cleaning status and staff assignments
-- Financial analytics and reporting for revenue, expenses, and performance metrics
-- Real-time updates via Server-Sent Events (SSE)
-- Automatic image compression for optimized uploads
-- Full Arabic interface support with right-to-left layout
-- Responsive design for desktop, tablet, and mobile screens
-
-## Technology stack
-
-- Frontend: React 19 with TypeScript
-- Styling: Tailwind CSS v4
-- Build tool: Vite 6
-- Animations: Framer Motion
-- Icons: Lucide React
-- API integration: REST API
-- Real-time updates: Server-Sent Events (SSE)
-- Image processing: browser-image-compression
-
-## Prerequisites
-
-- Node.js v18 or higher
-- npm or yarn
-- Google Gemini API key (if using AI integration)
-
-## Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/sabry660/dash1.git
-   cd dash1
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Configure environment variables:
-   Create a `.env.local` file in the project root and add the required values.
-   ```bash
-   echo "GEMINI_API_KEY=your_api_key_here" > .env.local
-   ```
-
-## Development
-
-Start the application in development mode:
+To start a local development server, run:
 
 ```bash
-npm run dev
+ng serve
 ```
 
-Open the application in a browser at `http://localhost:3000`.
+Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
 
-## Production build
+## Code scaffolding
 
-Build the application for production:
+Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
 
 ```bash
-npm run build
+ng generate component component-name
 ```
 
-Preview the production build:
+For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
 
 ```bash
-npm run preview
+ng generate --help
 ```
 
-## Project structure
+## Building
 
-```text
-src/
-├── components/          # Reusable UI components
-├── contexts/            # React context providers
-├── hooks/               # Custom hooks
-├── services/            # API service layer
-├── utils/               # Utility functions
-├── App.tsx              # Main application component
-├── main.tsx             # Application entry point
-└── index.css            # Global styles
-public/                   # Static assets
-package.json              # Project dependencies and scripts
-tsconfig.json             # TypeScript configuration
-vite.config.ts            # Vite configuration
-README.md                 # Project documentation
+To build the project run:
+
+```bash
+ng build
 ```
 
-## Available scripts
+This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
 
-- `npm run dev` — start the development server
-- `npm run build` — build the application for production
-- `npm run preview` — preview the production build
-- `npm run lint` — run TypeScript checks and linting
-- `npm run clean` — remove build artifacts
+## Running unit tests
 
-## Browser support
+To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
 
-The application is tested in modern browsers including Chrome, Firefox, Safari, and Edge.
+```bash
+ng test
+```
 
-## License
+## Running end-to-end tests
 
-This repository is proprietary.
+For end-to-end (e2e) testing, run:
 
-## Support
+```bash
+ng e2e
+```
 
-For questions or support, contact the project maintainer.
+Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
+
+## Additional Resources
+
+For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
